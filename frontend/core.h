@@ -28,6 +28,10 @@ bool core_state_save(Core *c, void *buf, size_t n);
 bool core_state_load(Core *c, const void *buf, size_t n);
 void *core_memory(Core *c, unsigned id, size_t *size);   /* RETRO_MEMORY_SAVE_RAM / _RTC */
 const char *core_option(Core *c, const char *key);       /* current value or NULL */
+/* multi-disc games (disk control interface); count 0 = not supported */
+unsigned core_disc_count(Core *c);
+unsigned core_disc_index(Core *c);
+bool core_disc_next(Core *c);   /* eject, select the next image (wraps), close */
 
 /* log to /var/log/rgarch.log (RGARCH_ROOT-prefixed), also used by the other modules */
 void rg_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));

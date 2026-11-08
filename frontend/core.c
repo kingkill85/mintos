@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* ---------- log ---------- */
 static FILE *logf_;
@@ -41,6 +42,7 @@ static struct {
 } f;
 
 static Core *cur;
+static struct retro_disk_control_callback disk;
 static char sysdir[1024], savedir[1024], optfile[1024];
 static void *romdata;
 
@@ -120,13 +122,21 @@ const char *core_option(Core *c, const char *key) {
     return NULL;
 }
 
+/* the core's options plus any other keys that were in the file (other core versions),
+ * written to a temp file and renamed */
 static void opts_write_file(void) {
     if (!nopts) return;
     mkdirs_for(optfile);
-    FILE *fp = fopen(optfile, "w");
+    char tmp[1100];
+    snprintf(tmp, sizeof tmp, "%s.tmp", optfile);
+    FILE *fp = fopen(tmp, "w");
     if (!fp) return;
     for (int i = 0; i < nopts; i++) fprintf(fp, "%s = \"%s\"\n", opts[i].key, opts[i].value);
+    for (int i = 0; i < nfile; i++)
+        if (!core_option(cur, file_opts[i].key)) fprintf(fp, "%s = \"%s\"\n", file_opts[i].key, file_opts[i].value);
+    bool ok = fflush(fp) == 0 && fsync(fileno(fp)) == 0;
     fclose(fp);
+    if (ok) rename(tmp, optfile); else unlink(tmp);
 }
 
 /* ---------- callbacks ---------- */
@@ -174,6 +184,10 @@ static bool environment(unsigned cmd, void *data) {
     }
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
         *(bool *)data = false; return true;
+    case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION:
+        *(unsigned *)data = 0; return true;     /* the base interface is enough to switch discs */
+    case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE:
+        disk = *(const struct retro_disk_control_callback *)data; return true;
     case RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK:
         cur->keyboard = ((const struct retro_keyboard_callback *)data)->callback; return true;
     case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
@@ -212,7 +226,19 @@ static bool environment(unsigned cmd, void *data) {
 }
 
 static void video_cb(const void *d, unsigned w, unsigned h, size_t pitch) { if (cur->on_video) cur->on_video(d, w, h, pitch); }
-static void audio_cb(int16_t l, int16_t r) { int16_t s[2] = {l, r}; if (cur->on_audio) cur->on_audio(s, 1); }
+/* cores that hand over one sample at a time: collect, flush after retro_run */
+static int16_t single[8192 * 2];
+static size_t nsingle;
+static void flush_single(void) {
+    if (nsingle && cur->on_audio) cur->on_audio(single, nsingle);
+    nsingle = 0;
+}
+static void audio_cb(int16_t l, int16_t r) {
+    if (nsingle == sizeof single / 4) flush_single();
+    single[2 * nsingle] = l;
+    single[2 * nsingle + 1] = r;
+    nsingle++;
+}
 static size_t audio_batch_cb(const int16_t *d, size_t n) { return cur->on_audio ? cur->on_audio(d, n) : n; }
 static void poll_cb(void) {}
 static int16_t input_cb(unsigned p, unsigned d, unsigned i, unsigned id) { return cur->on_input ? cur->on_input(p, d, i, id) : 0; }
@@ -277,7 +303,7 @@ int core_load(Core *c, const char *so, const char *rom) {
     return 0;
 }
 
-void core_run(Core *c) { cur = c; f.run(); }
+void core_run(Core *c) { cur = c; f.run(); flush_single(); }
 void core_reset(Core *c) { cur = c; if (f.reset) f.reset(); }
 
 void core_unload(Core *c) {
@@ -291,6 +317,7 @@ void core_unload(Core *c) {
     opt_free(file_opts, &nfile);
     /* not dlclose'd: several cores do not survive being unloaded and loaded again */
     memset(&f, 0, sizeof f);
+    memset(&disk, 0, sizeof disk);
 }
 
 size_t core_state_size(Core *c) { (void)c; return f.serialize_size ? f.serialize_size() : 0; }
@@ -301,4 +328,17 @@ void *core_memory(Core *c, unsigned id, size_t *size) {
     (void)c;
     *size = f.get_memory_size ? f.get_memory_size(id) : 0;
     return *size && f.get_memory_data ? f.get_memory_data(id) : NULL;
+}
+
+unsigned core_disc_count(Core *c) { (void)c; return disk.get_num_images ? disk.get_num_images() : 0; }
+unsigned core_disc_index(Core *c) { (void)c; return disk.get_image_index ? disk.get_image_index() : 0; }
+
+bool core_disc_next(Core *c) {
+    unsigned n = core_disc_count(c);
+    if (n < 2 || !disk.set_eject_state || !disk.set_image_index) return false;
+    unsigned next = (core_disc_index(c) + 1) % n;
+    bool ok = disk.set_eject_state(true) && disk.set_image_index(next);
+    disk.set_eject_state(false);
+    rg_log("disc %u/%u: %s\n", next + 1, n, ok ? "ok" : "failed");
+    return ok;
 }

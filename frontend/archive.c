@@ -23,7 +23,7 @@ static int has_ext(const char *list, const char *ext) {
 static int run(char *const argv[]) {
     pid_t pid = fork();
     if (pid == 0) {
-        freopen("/dev/null", "w", stdout);
+        if (!freopen("/dev/null", "w", stdout)) _exit(127);
         execvp(argv[0], argv);
         _exit(127);
     }

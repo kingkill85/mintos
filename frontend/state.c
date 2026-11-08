@@ -74,6 +74,8 @@ bool state_sram_save(Core *c, const char *rom) {
     return wrote;
 }
 
+static void save_preview(const char *rom, int slot, SDL_Surface *preview);
+
 static int state_path(const char *rom, int slot, char *p, size_t n) {
     return slot < 0 ? path_for(P_AUTO, rom, 0, p, n) : path_for(P_STATE, rom, slot, p, n);
 }
@@ -85,14 +87,25 @@ bool state_save(Core *c, const char *rom, int slot, SDL_Surface *preview) {
     void *b = malloc(n);
     bool ok = b && core_state_save(c, b, n) && write_atomic(p, b, n);
     free(b);
-    if (ok && preview && slot >= 0) {
-        char pp[1024], tmp[1100];
-        path_for(P_PREVIEW, rom, slot, pp, sizeof pp);
-        snprintf(tmp, sizeof tmp, "%s.tmp", pp);
-        if (IMG_SavePNG(preview, tmp) == 0) rename(tmp, pp);
-    }
+    if (ok) save_preview(rom, slot, preview);
     rg_log("save state %d: %s\n", slot, ok ? "ok" : "failed");
     return ok;
+}
+
+static void save_preview(const char *rom, int slot, SDL_Surface *preview) {
+    char pp[1024], tmp[1100];
+    if (!preview || slot < 0 || path_for(P_PREVIEW, rom, slot, pp, sizeof pp)) return;
+    snprintf(tmp, sizeof tmp, "%s.tmp", pp);
+    if (IMG_SavePNG(preview, tmp) == 0) rename(tmp, pp);
+}
+
+bool state_mark(const char *rom, int slot, SDL_Surface *preview) {
+    char p[1024];
+    if (slot < 0 || state_path(rom, slot, p, sizeof p)) return false;
+    static const char note[] = "saved by the game itself (ScummVM slot)\n";
+    if (!write_atomic(p, note, sizeof note - 1)) return false;
+    save_preview(rom, slot, preview);
+    return true;
 }
 
 bool state_load(Core *c, const char *rom, int slot) {

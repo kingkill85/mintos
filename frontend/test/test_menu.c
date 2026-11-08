@@ -20,7 +20,7 @@ int main(void) {
     menu_init(&m, false, 0, true);
     CHECK_INT(m.nitems, 3);
     CHECK_INT(m.items[1], M_GAMEMENU);
-    CHECK_STR(menu_label(M_GAMEMENU), "Speichern / Laden");
+    CHECK_STR(menu_label(M_GAMEMENU), "ScummVM-Menü");
     m.sel = 1;
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_GAMEMENU);
 
@@ -53,6 +53,15 @@ int main(void) {
     CHECK_STR(m.msg, "Laden fehlgeschlagen");
     menu_key(&m, RETRO_DEVICE_ID_JOYPAD_DOWN);
     CHECK(m.msg == NULL);
+    /* multi-disc game: "Disc wechseln" before Beenden, label shows the current disc */
+    menu_init(&m, true, 0, false);
+    menu_set_discs(&m, 3, 0);
+    CHECK_INT(m.nitems, 5);
+    CHECK_INT(m.items[3], M_DISC);
+    CHECK_INT(m.items[4], M_QUIT);
+    CHECK_STR(menu_item_text(&m, 3), "Disc wechseln (1/3)");
+    menu_set_discs(&m, 1, 0);              /* single disc: no item */
+    CHECK_INT(m.nitems, 4);
     CHECK_STR(menu_label(M_SAVE), "Speichern");
     CHECK_STR(menu_label(M_QUIT), "Beenden");
     TEST_END();

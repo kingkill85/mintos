@@ -8,8 +8,9 @@
 
 static int frames, last_w, last_h;
 static size_t audio_frames;
+static int audio_calls;
 static void on_video(const void *d, unsigned w, unsigned h, size_t pitch) { (void)d; (void)pitch; frames++; last_w = w; last_h = h; }
-static size_t on_audio(const int16_t *d, size_t n) { (void)d; audio_frames += n; return n; }
+static size_t on_audio(const int16_t *d, size_t n) { (void)d; audio_frames += n; audio_calls++; return n; }
 static int16_t on_input(unsigned p, unsigned d, unsigned i, unsigned id) { (void)p; (void)d; (void)i; (void)id; return 0; }
 
 int main(void) {
@@ -60,15 +61,34 @@ int main(void) {
     if (f) { fgets(line, sizeof line, f); fclose(f); }
     CHECK_STR(line, "test_colour = \"red\"\n");
 
-    /* a value from the .opt file is used on the next load */
-    f = fopen(opt, "w"); fputs("test_colour = \"blue\"\n", f); fclose(f);
+    /* a value from the .opt file is used on the next load; keys the core does not define stay */
+    f = fopen(opt, "w"); fputs("test_colour = \"blue\"\nold_key = \"keep\"\ntest_single = \"yes\"\n", f); fclose(f);
+    char zcmd[2048];
     Core c2 = {.on_video = on_video, .on_audio = on_audio, .on_input = on_input};
     CHECK_INT(core_load(&c2, "./testcore.so", rom), 0);
     CHECK_STR(core_option(&c2, "test_colour"), "blue");
+    /* single-sample cores are batched: one on_audio call per frame */
+    audio_calls = 0; audio_frames = 0;
+    core_run(&c2);
+    CHECK_INT(audio_calls, 1);
+    CHECK_INT(audio_frames, 800);
+    /* disk control: 2 images, switch to the second */
+    CHECK_INT(core_disc_count(&c2), 2);
+    CHECK_INT(core_disc_index(&c2), 0);
+    CHECK(core_disc_next(&c2));
+    CHECK_INT(core_disc_index(&c2), 1);
+    CHECK(core_disc_next(&c2));
+    CHECK_INT(core_disc_index(&c2), 0);   /* wraps */
     core_unload(&c2);
+    f = fopen(opt, "r");
+    char all[512] = "";
+    if (f) { fread(all, 1, sizeof all - 1, f); fclose(f); }
+    CHECK(strstr(all, "old_key = \"keep\"") != NULL);
+    snprintf(zcmd, sizeof zcmd, "%s.tmp", opt);
+    CHECK(access(zcmd, F_OK) != 0);
 
     /* zipped ROM for a core without zip support: extracted and loaded */
-    char zcmd[2048], zrom[1024];
+    char zrom[1024];
     snprintf(zrom, sizeof zrom, "%s/storage/roms/test/game.zip", root);
     snprintf(zcmd, sizeof zcmd, "cd %s/storage/roms/test && zip -q game.zip game.tst", root);
     CHECK_INT(system(zcmd), 0);

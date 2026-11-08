@@ -31,7 +31,13 @@ static SystemCfg cfg;
 static Ui ui;
 static const char *rom;
 static char title[256];
-static bool gamemenu_pending;   /* send F5 to the core once the game runs again */
+/* a key combo for the core, sent once the game runs again (down on one frame, up on the next) */
+static struct { unsigned code; uint16_t mod; int step; } pending;
+/* ScummVM (SCUMM engine): no savestates, but quicksave slots Alt+1..9 / load Ctrl+1..9;
+ * menu slots 0..8 map to ScummVM slots 1..9, slot 0 stays ScummVM's own autosave */
+static bool kstates;
+
+static void send_key(unsigned code, uint16_t mod) { pending.code = code; pending.mod = mod; pending.step = 0; }
 
 static void on_video(const void *d, unsigned w, unsigned h, size_t pitch) { video_frame(d, w, h, pitch, core.fmt); }
 static float aspect(void) { return core.av.geometry.aspect_ratio; }
@@ -76,7 +82,8 @@ static int error_page(void) {
 /* the menu; returns false when the game should end */
 static bool run_menu(int *slot) {
     Menu m;
-    menu_init(&m, core.can_state, *slot, core.keyboard != NULL);
+    menu_init(&m, core.can_state || kstates, *slot, core.keyboard != NULL && !core.can_state);
+    menu_set_discs(&m, core_disc_count(&core), core_disc_index(&core));
     audio_pause(true);
     input_clear();
     SDL_Texture *pv = NULL;
@@ -90,7 +97,8 @@ static bool run_menu(int *slot) {
             case M_CONTINUE: open = false; break;
             case M_SAVE: {
                 SDL_Surface *s = video_snapshot(320, 240);
-                bool ok = state_save(&core, rom, m.slot, s);
+                bool ok = kstates ? state_mark(rom, m.slot, s) : state_save(&core, rom, m.slot, s);
+                if (ok && kstates) send_key(RETROK_1 + m.slot, RETROKMOD_ALT);
                 if (s) SDL_FreeSurface(s);
                 if (ok) open = false; else menu_failed(&m, M_SAVE);
                 pv_slot = -2;   /* reload the preview */
@@ -99,12 +107,18 @@ static bool run_menu(int *slot) {
             case M_LOAD:
                 /* an empty slot does nothing (its preview says "Leer") */
                 if (state_exists(rom, m.slot)) {
-                    if (state_load(&core, rom, m.slot)) open = false; else menu_failed(&m, M_LOAD);
+                    if (kstates) { send_key(RETROK_1 + m.slot, RETROKMOD_CTRL); open = false; }
+                    else if (state_load(&core, rom, m.slot)) open = false;
+                    else menu_failed(&m, M_LOAD);
                 }
                 break;
             case M_GAMEMENU:
                 /* the game's own save/load menu (ScummVM: Ctrl+F5, works everywhere), after the menu closes */
-                gamemenu_pending = true;
+                send_key(RETROK_F5, RETROKMOD_CTRL);
+                open = false;
+                break;
+            case M_DISC:
+                core_disc_next(&core);
                 open = false;
                 break;
             case M_QUIT: open = false; keep = false; break;
@@ -165,6 +179,7 @@ int main(int argc, char **argv) {
         return r;
     }
     input_set_keyboard(core.keyboard);
+    kstates = !core.can_state && core.keyboard && !strcmp(system, "scummvm");
     audio_open(core.av.timing.sample_rate);
     state_sram_load(&core, rom);
 
@@ -175,11 +190,9 @@ int main(int argc, char **argv) {
     while (!quit_signal) {
         if (input_poll() && !run_menu(&slot)) break;
         Uint32 t_a = SDL_GetTicks();
-        if (gamemenu_pending && core.keyboard) {
-            static int step;
-            /* key down on one frame, up on the next */
-            core.keyboard(step == 0, RETROK_F5, 0, RETROKMOD_CTRL);   /* ScummVM global menu */
-            if (++step == 2) { step = 0; gamemenu_pending = false; }
+        if (pending.code && core.keyboard) {
+            core.keyboard(pending.step == 0, pending.code, 0, pending.mod);
+            if (++pending.step == 2) pending.code = 0;
         }
         core_run(&core);
         Uint32 t_b = SDL_GetTicks();

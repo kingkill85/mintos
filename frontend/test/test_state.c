@@ -67,6 +67,13 @@ int main(void) {
     state_sram_load(&c, rom);                  /* back to the saved byte */
     CHECK(sram[0] != 0x55);
 
+    /* games that save themselves (ScummVM quicksave): only a marker + preview for the menu */
+    CHECK(!state_exists(rom, 6));
+    CHECK(state_mark(rom, 6, pic));
+    CHECK(state_exists(rom, 6));
+    snprintf(p, sizeof p, "%s/storage/states/gb/Zelda, The (Rev 2).st6.png", root);
+    CHECK(access(p, F_OK) == 0);
+
     SDL_Renderer *r = SDL_CreateSoftwareRenderer(SDL_CreateRGBSurfaceWithFormat(0, 64, 64, 32, SDL_PIXELFORMAT_ARGB8888));
     SDL_Texture *t = state_preview(r, rom, 2);
     CHECK(t != NULL);

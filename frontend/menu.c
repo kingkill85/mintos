@@ -1,4 +1,5 @@
 #include "menu.h"
+#include <stdio.h>
 
 void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
     *m = (Menu){.can_state = can_state, .slot = last_slot >= 0 && last_slot < MENU_SLOTS ? last_slot : 0};
@@ -10,6 +11,28 @@ void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
 
 bool menu_on_slot_item(const Menu *m) {
     return m->items[m->sel] == M_SAVE || m->items[m->sel] == M_LOAD;
+}
+
+void menu_set_discs(Menu *m, unsigned count, unsigned index) {
+    int at = -1;
+    for (int i = 0; i < m->nitems; i++) if (m->items[i] == M_DISC) at = i;
+    if (at >= 0) {   /* remove */
+        for (int i = at; i < m->nitems - 1; i++) m->items[i] = m->items[i + 1];
+        m->nitems--;
+        if (m->sel >= m->nitems) m->sel = m->nitems - 1;
+    }
+    m->discs = count; m->disc = index;
+    if (count > 1) {   /* insert before Beenden (the last item) */
+        m->items[m->nitems] = m->items[m->nitems - 1];
+        m->items[m->nitems - 1] = M_DISC;
+        m->nitems++;
+    }
+}
+
+const char *menu_item_text(Menu *m, int i) {
+    if (m->items[i] != M_DISC) return menu_label(m->items[i]);
+    snprintf(m->text, sizeof m->text, "Disc wechseln (%u/%u)", m->disc + 1, m->discs);
+    return m->text;
 }
 
 void menu_failed(Menu *m, MenuAction a) {
@@ -34,7 +57,7 @@ const char *menu_label(MenuAction a) {
     case M_CONTINUE: return "Weiter";
     case M_SAVE: return "Speichern";
     case M_LOAD: return "Laden";
-    case M_GAMEMENU: return "Speichern / Laden";
+    case M_GAMEMENU: return "ScummVM-Menü";
     case M_QUIT: return "Beenden";
     default: return "";
     }
@@ -75,7 +98,7 @@ static void preview_box(Ui *ui, const Menu *m, SDL_Texture *preview) {
     }
 }
 
-void menu_draw(Ui *ui, const Menu *m, const char *title, SDL_Texture *preview) {
+void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     /* title pill, battery */
     int maxw = ui->w - 2 * PAD - PILL - 10 - 48;
     int tw = ui_text_w(ui->big, title);
@@ -84,7 +107,7 @@ void menu_draw(Ui *ui, const Menu *m, const char *title, SDL_Texture *preview) {
     ui_battery(ui);
 
     for (int i = 0; i < m->nitems; i++) {
-        const char *s = menu_label(m->items[i]);
+        const char *s = menu_item_text(m, i);
         int y = ITEM_Y + i * PILL;
         if (i == m->sel) {
             ui_pill(ui, PAD, y, ui_text_w(ui->big, s) + 48, PILL, UI_WHITE);
