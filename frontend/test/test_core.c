@@ -97,6 +97,16 @@ int main(void) {
     CHECK_INT(core_load(&c4, "./testcore.so", zrom), 0);
     core_unload(&c4);
 
+    /* a core that withdraws its disk interface with NULL (Genesis Plus GX cartridges) */
+    char nrom[1024];
+    snprintf(nrom, sizeof nrom, "%s/storage/roms/test/nodisk.tst", root);
+    snprintf(zcmd, sizeof zcmd, "echo x > '%s'", nrom);
+    system(zcmd);
+    Core c5 = {.on_video = on_video, .on_audio = on_audio, .on_input = on_input};
+    CHECK_INT(core_load(&c5, "./testcore.so", nrom), 0);
+    CHECK_INT(core_disc_count(&c5), 0);
+    core_unload(&c5);
+
     Core c3 = {0};
     CHECK_INT(core_load(&c3, "./missing.so", rom), -1);
     snprintf(cmd, sizeof cmd, "rm -rf %s", root); system(cmd);

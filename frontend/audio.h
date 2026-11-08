@@ -13,4 +13,6 @@ void audio_pause(bool on);
 void audio_close(void);
 int  audio_underruns(void);
 double audio_input_rate(void);
-int  audio_playing(void);                          /* device running (after prefill) */                    /* current resampler input rate (tests) */                       /* times the queue ran empty while playing */
+int  audio_playing(void);
+void audio_set_rate(double core_rate);           /* the core changed its sample rate */
+Uint32 audio_queued(void);                        /* bytes waiting in the device queue */                          /* device running (after prefill) */                    /* current resampler input rate (tests) */                       /* times the queue ran empty while playing */

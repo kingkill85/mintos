@@ -8,8 +8,9 @@ Before=rglauncher.service sysinit.target
 Type=oneshot
 RemainAfterExit=yes
 # vtcon "frame buffer device" draws boot/console text on the panel whenever no program
-# holds the display (e.g. while the list hands over to a game); unbind it
-ExecStart=/bin/sh -c 'for v in /sys/class/vtconsole/vtcon*; do grep -q "frame buffer" "$v/name" && echo 0 > "$v/bind"; done; true'
+# holds the display (e.g. while the list hands over to a game); unbind it and blank the
+# console framebuffer, which otherwise keeps the last text (kernel messages) on the panel
+ExecStart=/bin/sh -c 'for v in /sys/class/vtconsole/vtcon*; do grep -q "frame buffer" "$v/name" && echo 0 > "$v/bind"; done; cat /dev/zero > /dev/fb0 2>/dev/null; true'
 
 [Install]
 WantedBy=sysinit.target

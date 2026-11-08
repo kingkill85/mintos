@@ -88,6 +88,19 @@ int main(void) {
     af = fopen(p, "rb"); if (af) { fread(got, 1, 8, af); fclose(af); }
     CHECK_STR(got, "OLDSTATE");
 
+    /* a --resume whose load fails must not overwrite the auto state on exit */
+    af = fopen(p, "wb"); fputs("BAD", af); fclose(af);      /* too short: load fails */
+    pid = start(rom, "--resume");
+    usleep(800000);
+    kill(pid, SIGTERM);
+    CHECK_INT(wait_exit(pid), 0);
+    memset(got, 0, sizeof got);
+    char failed[1100];
+    snprintf(failed, sizeof failed, "%s.failed", p);
+    af = fopen(failed, "rb"); if (af) { fread(got, 1, 8, af); fclose(af); }
+    CHECK_STR(got, "BAD");                     /* kept aside */
+    CHECK(access(p, F_OK) == 0);               /* and the power key works again */
+
     /* usage */
     pid = fork();
     if (!pid) { execl("./rgarch-host", "rgarch", (char *)NULL); _exit(127); }

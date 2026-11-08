@@ -187,7 +187,10 @@ static bool environment(unsigned cmd, void *data) {
     case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION:
         *(unsigned *)data = 0; return true;     /* the base interface is enough to switch discs */
     case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE:
-        disk = *(const struct retro_disk_control_callback *)data; return true;
+        /* NULL withdraws it (Genesis Plus GX does that for cartridges) */
+        if (data) disk = *(const struct retro_disk_control_callback *)data;
+        else memset(&disk, 0, sizeof disk);
+        return true;
     case RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK:
         cur->keyboard = ((const struct retro_keyboard_callback *)data)->callback; return true;
     case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:

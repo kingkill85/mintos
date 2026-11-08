@@ -34,7 +34,8 @@ void video_close(void) {
 }
 
 static Uint32 sdl_format(enum retro_pixel_format f) {
-    return f == RETRO_PIXEL_FORMAT_XRGB8888 ? SDL_PIXELFORMAT_ARGB8888
+    /* XRGB: no alpha channel, X may be 0 */
+    return f == RETRO_PIXEL_FORMAT_XRGB8888 ? SDL_PIXELFORMAT_RGB888
          : f == RETRO_PIXEL_FORMAT_RGB565 ? SDL_PIXELFORMAT_RGB565 : SDL_PIXELFORMAT_RGB555;
 }
 

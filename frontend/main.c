@@ -15,6 +15,7 @@
 #include "core.h"
 #include "input.h"
 #include "menu.h"
+#include "paths.h"
 #include "state.h"
 #include "ui.h"
 #include "video.h"
@@ -185,7 +186,7 @@ int main(int argc, char **argv) {
 
     int slot = 0;
     Uint32 last_sram = SDL_GetTicks();
-    bool first = true, ran = false;   /* ran: the game ran (and a resume was tried) */
+    bool first = true, ran = false;   /* ran: the game ran (and a resume, if any, loaded) */
     if (getenv("RGARCH_TEST_TERM_EARLY")) raise(SIGTERM);   /* test: power key during start-up */
     while (!quit_signal) {
         if (input_poll() && !run_menu(&slot)) break;
@@ -196,9 +197,24 @@ int main(int argc, char **argv) {
         }
         core_run(&core);
         Uint32 t_b = SDL_GetTicks();
-        if (first && resume) state_load(&core, rom, -1);
-        first = false;
-        ran = true;
+        if (core.geometry_changed) {   /* SET_SYSTEM_AV_INFO may bring a new sample rate */
+            audio_set_rate(core.av.timing.sample_rate);
+            core.geometry_changed = false;
+        }
+        /* a resume that fails to load must not be replaced by this fresh start on exit */
+        if (first) {
+            if (resume && !state_load(&core, rom, -1)) {
+                /* keep an unloadable resume point aside instead of losing it on the next power-off */
+                char a[1024], b[1100];
+                if (!path_for(P_AUTO, rom, 0, a, sizeof a)) {
+                    snprintf(b, sizeof b, "%s.failed", a);
+                    rename(a, b);
+                    rg_log("resume failed, kept as %s\n", b);
+                }
+            }
+            ran = true;
+            first = false;
+        }
         video_draw(&cfg, aspect(), false);
         video_flip();
         Uint32 t_c = SDL_GetTicks();
@@ -210,10 +226,11 @@ int main(int argc, char **argv) {
             if (!t0) t0 = now;
             if (now - t0 >= 1000) { rg_log("fps %u (run %ums, draw+flip %ums)\n", n, tr, tv); n = 0; t0 = now; tr = tv = 0; }
         }
-        if (SDL_GetTicks() - last_sram > SRAM_EVERY_MS) { state_sram_save(&core, rom); last_sram = SDL_GetTicks(); }
+        if (SDL_GetTicks() - last_sram > SRAM_EVERY_MS) { state_sram_save_async(&core, rom); last_sram = SDL_GetTicks(); }
     }
     /* not before the first frame: that would replace a good resume point with a fresh boot */
     if (quit_signal && core.can_state && ran) state_save(&core, rom, -1, NULL);
+    state_sram_wait();
     state_sram_save(&core, rom);
     audio_close();
     core_unload(&core);

@@ -36,9 +36,14 @@ size_t audio_push(const int16_t *s, size_t frames) {
     /* queue low -> rate_adjust > 1 -> treat the core as slower, so each core sample
      * yields more output (and the other way round) */
     cur_rate = core_rate / rate_adjust(q, TARGET);
-    size_t n = resample(&rs, s, frames, cur_rate / OUT_RATE, outbuf, sizeof outbuf / 4);
-    fade_apply(&fade, outbuf, n);
-    SDL_QueueAudio(dev, outbuf, (Uint32)(n * 4));
+    /* in chunks, so even a huge batch fits outbuf (step >= 0.25 -> <= 8192 frames out) */
+    for (size_t done = 0; done < frames;) {
+        size_t chunk = frames - done > 2048 ? 2048 : frames - done;
+        size_t n = resample(&rs, s + 2 * done, chunk, cur_rate / OUT_RATE, outbuf, sizeof outbuf / 4);
+        fade_apply(&fade, outbuf, n);
+        SDL_QueueAudio(dev, outbuf, (Uint32)(n * 4));
+        done += chunk;
+    }
     primed = true;
     if (!playing && !paused && SDL_GetQueuedAudioSize(dev) >= TARGET) {
         SDL_PauseAudioDevice(dev, 0);
@@ -71,3 +76,5 @@ void audio_close(void) {
 int audio_underruns(void) { return underruns; }
 double audio_input_rate(void) { return cur_rate; }
 int audio_playing(void) { return playing; }
+void audio_set_rate(double rate) { if (rate > 0) core_rate = rate; }
+Uint32 audio_queued(void) { return dev ? SDL_GetQueuedAudioSize(dev) : 0; }

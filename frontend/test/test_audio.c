@@ -3,6 +3,8 @@
 #include <string.h>
 #include "check.h"
 #include "audio.h"
+Uint32 audio_queued(void);
+#define SDL_GetQueuedAudioSize_test audio_queued
 
 static int16_t buf[2048 * 2];
 
@@ -41,6 +43,23 @@ int main(void) {
     Uint32 w0 = SDL_GetTicks();
     audio_wait();
     CHECK(SDL_GetTicks() - w0 < 8);
+    audio_close();
+
+    /* one huge batch (24 kHz core, 12000 frames -> 24000 output frames) is not cut off */
+    CHECK_INT(audio_open(24000.0), 0);
+    static int16_t big[12000 * 2];
+    audio_push(big, 12000);
+    {
+        Uint32 q = SDL_GetQueuedAudioSize_test();
+        CHECK(q > 23000 * 4);
+    }
+    audio_close();
+
+    /* the core changes its sample rate (SET_SYSTEM_AV_INFO) */
+    CHECK_INT(audio_open(32768.0), 0);
+    audio_set_rate(44100.0);
+    audio_push(buf, 10);
+    CHECK(audio_input_rate() > 43000.0);
     audio_close();
 
     /* starved queue: the stream must take a LOWER input rate (more output per core sample) */

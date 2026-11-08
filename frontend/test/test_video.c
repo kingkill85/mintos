@@ -23,6 +23,16 @@ int main(void) {
         video_flip();
         CHECK_STR(SDL_GetError(), "");
     }
+    /* XRGB8888 with X = 0 (as cores write it) must not come out transparent/black */
+    video_frame(px32, 256, 224, 256 * 4, RETRO_PIXEL_FORMAT_XRGB8888);
+    SDL_Surface *red = video_snapshot(16, 16);
+    CHECK(red != NULL);
+    if (red) {
+        Uint32 v = ((Uint32 *)red->pixels)[8 * 16 + 8];
+        CHECK_INT((v >> 16) & 0xff, 0xff);
+        SDL_FreeSurface(red);
+    }
+
     /* geometry change mid-game: a wider frame must replace the texture */
     video_frame(px32, 128, 112, 128 * 4, RETRO_PIXEL_FORMAT_XRGB8888);
     s.filter = FILTER_NEAREST; s.scale = SCALE_INTEGER;

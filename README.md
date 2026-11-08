@@ -26,6 +26,7 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
   - `rg353-power`: power key like Garlic OS. During a game it remembers the game, lets
     RetroArch write its auto save state and powers off; on the next boot rglauncher starts
     that game again and loads the state. Outside games it just powers off.
+  - `no-fbcon`: detaches and blanks the text console, so no kernel text shows between list and game.
   - `rg353-audio`: speaker/headphone switching (mainline leaves it on headphones) and the
     volume buttons.
   - `usb-net`: USB NCM gadget, the device is `10.55.0.2` (PC side `10.55.0.1/24`), SSH works without Wi-Fi.
@@ -39,7 +40,13 @@ starts every system listed in `/storage/.config/rgarch/systems.cfg` in rgarch (c
 filter, overlay per system); n64, nds, psp and dreamcast still use RetroArch (phase 2).
 
 - **F** opens the menu: Weiter, Speichern, Laden (9 slots with a preview picture, left/right),
-  Beenden. Cores without savestates (ScummVM) show Weiter and Beenden only.
+  Disc wechseln (multi-disc games), Beenden.
+- ScummVM has no savestates: Speichern/Laden use its quicksave slots (Alt/Ctrl + 1..9, menu
+  slots 1-9 = ScummVM slots 1-9; slot 0 stays ScummVM's autosave); "ScummVM-Menü" opens its
+  own menu (Ctrl+F5).
+- Zipped/7z ROMs are extracted to /tmp for cores that cannot read archives.
+- RetroArch's compressed states (#RZIP) load; a resume point that cannot be loaded is kept
+  as `<game>.auto.failed` instead of being overwritten.
 - Saves: `/storage/saves/<system>/<game>.srm` (+ `.rtc`); states:
   `/storage/states/<system>/<game>.st<n>` + `.st<n>.png`; power-key state `<game>.auto`.
   `rg353-migrate-saves` moved the old RetroArch files there.
