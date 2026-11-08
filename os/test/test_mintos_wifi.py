@@ -29,6 +29,9 @@ check(mw.parse({})["device"] is None, "no iwd objects")
 # status: device=0 while the chip is not there yet (driver still loading), so the UI does not say "Aus"
 check(mw.status_text(mw.parse({})) == "device=0\npowered=0\nstate=\nssid=", "status without device")
 check(mw.status_text(st) == "device=1\npowered=1\nstate=connected\nssid=Tardis", "status connected")
+# iwd stopped: switched off in the settings -> "Aus" (device there, not powered); otherwise still starting
+check(mw.status_text(mw.offline(True)) == "device=1\npowered=0\nstate=\nssid=", "off by setting")
+check(mw.status_text(mw.offline(False)) == "device=0\npowered=0\nstate=\nssid=", "starting")
 
 # signal (100 * dBm) -> 0..4 bars
 check(mw.bars(-4000) == 4 and mw.bars(-6500) == 3 and mw.bars(-7200) == 2 and mw.bars(-8000) == 1 and mw.bars(-9500) == 0, "bars")

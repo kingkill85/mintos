@@ -6,12 +6,13 @@
   mintos-bt connect <mac>       pair (no PIN, "just works") + trust + connect; exit 0 when connected
   mintos-bt disconnect <mac>
   mintos-bt forget <mac>
-  mintos-bt power on|off
+  mintos-bt power on|off        off: stops bluetoothd + bluealsa and unloads the driver; on: back
   mintos-bt boot                apply settings.cfg "bt = off" at start-up
 Discovery runs inside bluetoothctl: BlueZ stops a scan when the client that started it leaves."""
-import re, subprocess, sys
+import re, subprocess, sys, time
 
 SETTINGS = "/storage/.config/mintos/settings.cfg"
+MODULES = ["hidp", "uhid", "hci_uart", "btrtl", "bluetooth"]
 AUDIO_UUIDS = ("0000110b", "0000110a", "00001108", "0000111e")   # A2DP sink/source, headset, handsfree
 INPUT_UUIDS = ("00001124", "00001812")                           # HID, HID over GATT
 
@@ -101,6 +102,30 @@ def cmd_connect(mac):
     return 0
 
 
+def active():
+    return subprocess.run(["systemctl", "is-active", "--quiet", "bluetooth"]).returncode == 0
+
+
+def status_line(running, show):
+    return "powered=%d" % (running and "Powered: yes" in show)
+
+
+def power(on):
+    if on:
+        subprocess.run(["modprobe", "hci_uart"])
+        subprocess.run(["systemctl", "start", "bluetooth", "bluealsa"])
+        for _ in range(20):   # bluetoothd needs a moment to see hci0
+            if "Powered:" in ctl("show"):
+                break
+            time.sleep(0.5)
+        return 0 if "succeeded" in ctl("power", "on") else 1
+    if active():
+        ctl("power", "off")
+    subprocess.run(["systemctl", "stop", "bluealsa", "bluetooth"])
+    subprocess.run(["modprobe", "-r"] + MODULES, capture_output=True)
+    return 0
+
+
 def setting_off():
     try:
         return any(re.match(r"\s*bt\s*=\s*off", l) for l in open(SETTINGS))
@@ -110,15 +135,18 @@ def setting_off():
 
 def main(argv):
     if argv[:1] == ["status"]:
-        print("powered=%d" % ("Powered: yes" in ctl("show"))); return 0
-    if argv[:1] == ["list"]:
-        return cmd_list("--scan" in argv)
+        running = active()
+        print(status_line(running, ctl("show") if running else "")); return 0
     if argv[:1] == ["boot"]:
         if setting_off():
-            ctl("power", "off")
+            power(False)
         return 0
     if argv[:1] == ["power"] and len(argv) == 2:
-        return 0 if "succeeded" in ctl("power", "on" if argv[1] == "on" else "off") else 1
+        return power(argv[1] == "on")
+    if not active():   # every other command talks to bluetoothd; bluetoothctl would hang without it
+        print("Bluetooth ist aus"); return 1
+    if argv[:1] == ["list"]:
+        return cmd_list("--scan" in argv)
     if len(argv) == 2 and is_mac(argv[1]):
         if argv[0] == "connect":
             return cmd_connect(argv[1])

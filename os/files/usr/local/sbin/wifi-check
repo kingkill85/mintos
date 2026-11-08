@@ -6,12 +6,11 @@
 HOST=fe000000.mmc
 DRV=/sys/bus/platform/drivers/dwmmc_rockchip
 # switched off in the settings (settings.cfg "wifi = off"): keep it off
+# (iwd stopped and the driver unloaded, as "mintos-wifi power off" does - not called here: it stops us)
 if grep -qE '^wifi *= *off' /storage/.config/mintos/settings.cfg 2>/dev/null; then
-  for i in $(seq 1 30); do
-    /usr/local/sbin/mintos-wifi power off >/dev/null 2>&1 && { echo "wifi off (settings)"; exit 0; }
-    sleep 1
-  done
-  exit 0
+  systemctl stop iwd
+  modprobe -r rtw88_8821cs rtw88_8821c rtw88_sdio rtw88_core mac80211 cfg80211 2>/dev/null
+  echo "wifi off (settings)"; exit 0
 fi
 connected() { iwctl station wlan0 show 2>/dev/null | grep -qE 'State +connected'; }
 wait_connected() { for i in $(seq 1 "$1"); do connected && return 0; sleep 2; done; return 1; }

@@ -4,9 +4,12 @@
   mintos-wifi list [--cached]   scan (unless --cached), then "name<TAB>type<TAB>bars 0-4<TAB>known<TAB>connected" per network
   mintos-wifi connect <ssid>    passphrase (if needed) on stdin; exit 0 when connected
   mintos-wifi forget <ssid>
-  mintos-wifi power on|off
+  mintos-wifi power on|off      off: stops iwd and unloads the driver (RAM, battery); on: back + wifi-check
 A new network's passphrase goes into /var/lib/iwd/<name>.psk (iwd picks it up), so no agent is needed."""
 import json, os, re, subprocess, sys, time
+
+SETTINGS = "/storage/.config/mintos/settings.cfg"
+MODULES = ["rtw88_8821cs", "rtw88_8821c", "rtw88_sdio", "rtw88_core", "mac80211", "cfg80211"]
 
 SVC = "net.connman.iwd"
 IWD_DIR = "/var/lib/iwd"
@@ -67,6 +70,25 @@ def write_psk(d, name, passphrase):
 
 def status_text(st):
     return "device=%d\npowered=%d\nstate=%s\nssid=%s" % (st["device"] is not None, st["powered"], st["state"], st["ssid"])
+
+
+def offline(switched_off):
+    """status while iwd is not running: off in the settings, or still coming up"""
+    st = parse({})
+    if switched_off:
+        st["device"] = "off"
+    return st
+
+
+def setting_off():
+    try:
+        return any(re.match(r"\s*wifi\s*=\s*off", l) for l in open(SETTINGS))
+    except OSError:
+        return False
+
+
+def iwd_active():
+    return subprocess.run(["systemctl", "is-active", "--quiet", "iwd"]).returncode == 0
 
 
 def state():
@@ -142,20 +164,26 @@ def cmd_forget(name):
 
 
 def cmd_power(on):
-    st = state()
-    if not st["device"]:
-        return 1
-    busctl("set-property", SVC, st["device"], "net.connman.iwd.Device", "Powered", "b", "true" if on else "false")
+    if on:
+        subprocess.run(["modprobe", MODULES[0]])
+        subprocess.run(["systemctl", "start", "iwd"])
+        subprocess.run(["systemctl", "restart", "--no-block", "wifi-check"])   # reloads the driver if needed
+    else:
+        subprocess.run(["systemctl", "stop", "wifi-check", "iwd"])
+        subprocess.run(["modprobe", "-r"] + MODULES, capture_output=True)
     return 0
 
 
 def main(argv):
     try:
         if argv[:1] == ["status"]:
-            try:
-                st = state()
-            except RuntimeError:   # iwd not running (yet)
-                st = parse({})
+            if not iwd_active():
+                st = offline(setting_off())
+            else:
+                try:
+                    st = state()
+                except RuntimeError:   # iwd starting
+                    st = offline(False)
             print(status_text(st))
             return 0
         if argv[:1] == ["list"]:
