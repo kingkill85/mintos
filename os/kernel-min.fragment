@@ -72,3 +72,7 @@ CONFIG_AUDIT=n
 CONFIG_MULTIPLEXER=y
 CONFIG_MUX_GPIO=y
 CONFIG_IIO_MUX=y
+# Bluetooth controllers: classic HID (BT_HIDP) and BLE HID over GATT (bluez needs /dev/uhid)
+CONFIG_BT_HIDP=m
+CONFIG_UHID=m
+CONFIG_HID_MICROSOFT=m
