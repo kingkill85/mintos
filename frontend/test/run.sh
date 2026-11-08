@@ -16,7 +16,7 @@ for n in "${names[@]}"; do
   sobuild=true
   [ -n "$so" ] && sobuild="gcc -std=gnu11 -shared -fPIC -Ifrontend $so -o $OUT/$(basename "${so%.c}").so"
   if nix-shell -p gcc SDL2 SDL2_ttf SDL2_image pkg-config --run \
-      "$sobuild && gcc -std=gnu11 -g -Wall -Wno-unused-function -Ifrontend -Icommon -Ifrontend/test \$(pkg-config --cflags sdl2) $src $uses -o $OUT/$n $libs -lm -ldl" >"$OUT/$n.build.log" 2>&1 \
+      "$sobuild && gcc -std=gnu11 -g -Wall -Wno-unused-function -Ifrontend -Icommon -Ifrontend/test \$(pkg-config --cflags sdl2 SDL2_ttf SDL2_image) $src $uses -o $OUT/$n $libs -lm -ldl" >"$OUT/$n.build.log" 2>&1 \
      && (cd "$OUT" && ./"$n") >"$OUT/$n.log" 2>&1; then
     echo "ok $n"
   else
