@@ -2,7 +2,7 @@
 """Power key like Garlic OS: switching off during a game saves it and resumes on boot.
 
 Short press of the power key (rk805 pwrkey, KEY_POWER):
-- RetroArch running: remember the game in /storage/.config/rglauncher/resume, stop the
+- a game running (rgarch or RetroArch): remember the game in /storage/.config/rglauncher/resume, stop the
   launcher service (RetroArch gets SIGTERM and writes its auto save state on exit,
   savestate_auto_save), then power off. rglauncher starts that game again on boot with
   RESUME=1, which loads the auto state.
@@ -24,7 +24,7 @@ def running(name):
 
 
 def power_off():
-    if running("retroarch") and os.path.exists(CURRENT):
+    if (running("rgarch") or running("retroarch")) and os.path.exists(CURRENT):
         shutil.copyfile(CURRENT, RESUME)
         print("saving", open(CURRENT).read().strip(), flush=True)
     subprocess.run(["systemctl", "stop", "rglauncher"])  # SIGTERM to the game, waits for it

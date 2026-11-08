@@ -63,9 +63,11 @@ bool state_sram_save(Core *c, const char *rom) {
     for (int i = 0; i < 2; i++) {
         size_t n;
         void *mem = core_memory(c, mem_id[i], &n);
-        if (!mem || (saved[i] && saved_n[i] == n && !memcmp(saved[i], mem, n))) continue;
         char p[1024];
-        if (path_for(mem_path[i], rom, 0, p, sizeof p) || !write_atomic(p, mem, n)) continue;
+        if (!mem || path_for(mem_path[i], rom, 0, p, sizeof p)) continue;
+        /* write when changed, or when there is no file yet (like RetroArch) */
+        if (saved[i] && saved_n[i] == n && !memcmp(saved[i], mem, n) && access(p, F_OK) == 0) continue;
+        if (!write_atomic(p, mem, n)) continue;
         remember(i, mem, n);
         wrote = true;
     }

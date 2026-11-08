@@ -19,8 +19,8 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
   - Both use the DTB with the Wi-Fi SDIO limited to 25 MHz high-speed (SDR50 gave CRC errors).
 - `os/files/`: everything installed on top of Debian: systemd units, iwd, sshd, RetroArch
   config, `launch.sh` (system → core), and helpers:
-  - `rg353-pad`: merges the buttons and the F key (separate kernel devices) into one
-    uinput gamepad "RG353V Gamepad", so F can be RetroArch's hotkey.
+  - `rg353-pad`: merges the buttons, the F key and the sticks (separate kernel devices) into
+    one uinput gamepad "RG353V Gamepad".
   - `wifi-check`: gets the RTL8821CS up after boot (re-probes the SDIO controller if the card
     was not detected, reloads rtw88 after firmware upload errors) until iwd connects.
   - `rg353-power`: power key like Garlic OS. During a game it remembers the game, lets
@@ -32,17 +32,23 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
 - `os/chroot-install.sh`, `os/stage.sh`, `os/flash-sd.sh`: build the root filesystem on the
   device while it runs Android (adb root, no card reader needed) and write it to the SD card.
 
-## Controls in games (Retro Game Corps layout, F = hotkey)
+## rgarch (games)
 
-| F + Start | quit to list | F + X | RetroArch menu |
-|---|---|---|---|
-| F + R1 / L1 | save / load state | F + R2 | fast forward |
-| F + L2 | rewind | F + Y | FPS |
-| F + B | reset | | |
+`frontend/` is **rgarch**, a small libretro frontend with a MinUI-style menu. `launch.sh`
+starts every system listed in `/storage/.config/rgarch/systems.cfg` in rgarch (core, scaling,
+filter, overlay per system); n64, nds, psp and dreamcast still use RetroArch (phase 2).
 
-Video follows the Retro Game Corps RG351V guide (same 640×480 screen): integer scaling
-(not GBA), core aspect (SNES 4:3), `sharp-bilinear-2x-prescale`, J.dewitz 351V overlays
-for GB/GBC/Game Gear. Saves (`.srm`) and states sit next to the ROMs.
+- **F** opens the menu: Weiter, Speichern, Laden (9 slots with a preview picture, left/right),
+  Beenden. Cores without savestates (ScummVM) show Weiter and Beenden only.
+- Saves: `/storage/saves/<system>/<game>.srm` (+ `.rtc`); states:
+  `/storage/states/<system>/<game>.st<n>` + `.st<n>.png`; power-key state `<game>.auto`.
+  `rg353-migrate-saves` moved the old RetroArch files there.
+- Core options stay in RetroArch's `.opt` files; log in `/var/log/rgarch.log`.
+- Tests: `frontend/test/run.sh` (host, SDL dummy drivers, a test core);
+  `frontend/test/device-smoke.sh` (on the device: start, menu, save/load slot 1, quit).
+
+Video follows the Retro Game Corps guides (640×480): GB/GBC/Game Gear with frame overlays,
+TV consoles full screen with a sharp filter, arcade/ScummVM in their own aspect, PS1 bilinear.
 
 ## Everyday use
 

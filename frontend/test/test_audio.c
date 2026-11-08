@@ -1,4 +1,4 @@
-// uses: frontend/audio.c frontend/ratecontrol.c
+// uses: frontend/audio.c frontend/ratecontrol.c frontend/core.c frontend/paths.c
 // libs: $(pkg-config --libs sdl2)
 #include <string.h>
 #include "check.h"
@@ -19,5 +19,22 @@ int main(void) {
         audio_close();
     }
     CHECK_INT(audio_push(buf, 10), 10);   /* closed: swallow, no crash */
+
+    /* starved queue: the stream must take a LOWER input rate (more output per core sample) */
+    CHECK_INT(audio_open(32768.0), 0);
+    audio_push(buf, 10);
+    SDL_Delay(100);
+    audio_push(buf, 10);
+    CHECK(audio_input_rate() < 32768.0);
+    audio_close();
+
+    /* an empty queue while playing counts as an underrun (logged for the listen test) */
+    CHECK_INT(audio_open(48000.0), 0);
+    for (int i = 0; i < 10; i++) audio_push(buf, 800);
+    int before = audio_underruns();
+    SDL_Delay(400);                        /* the dummy device plays the queue empty */
+    audio_push(buf, 800);
+    CHECK_INT(audio_underruns(), before + 1);
+    audio_close();
     TEST_END();
 }

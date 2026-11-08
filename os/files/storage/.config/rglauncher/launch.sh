@@ -1,6 +1,8 @@
 #!/bin/bash
-# launch.sh <rom> <system>: start a game with RetroArch (or ScummVM) on the rg353v OS.
+# launch.sh <rom> <system>: start a game. Systems listed in rgarch's systems.cfg run in
+# rgarch (MinUI menu); the rest (n64, nds, psp, dreamcast) still in RetroArch.
 ROM="$1"; SYS="$2"
+TITLE=$(basename "$ROM"); TITLE=$(printf "%s" "${TITLE%.*}" | sed "s/ *[([][^])]*[])]//g")   # as in the list
 # for rg353-power: which game is running (resumed after the power key switched off)
 printf '%s\t%s\n' "$SYS" "$ROM" > /run/rglauncher-current
 CORES=/storage/.config/retroarch/cores   # libretro buildbot builds (Debian's are years old)
@@ -41,6 +43,11 @@ case "$SYS" in
   *) echo "no emulator for $SYS"; exit 1 ;;
 esac
 echo "$(date +%T) $SYS core=$CORE rom=$ROM resume=${RESUME:-0}"
+if grep -q "^\[$SYS\]" /storage/.config/rgarch/systems.cfg 2>/dev/null; then
+  export RGARCH_TITLE="$TITLE"
+  if [ "$RESUME" = 1 ]; then exec /usr/local/bin/rgarch --resume "$SYS" "$ROM"; fi
+  exec /usr/local/bin/rgarch "$SYS" "$ROM"
+fi
 # RESUME=1 (set by rglauncher after a power-off in game): load the auto save state
 EXTRA=; [ "$RESUME" = 1 ] && EXTRA="--appendconfig /storage/.config/retroarch/resume.cfg"
 exec retroarch --verbose --config "$CFG" $EXTRA -L "$CORES/${CORE}_libretro.so" "$ROM"
