@@ -65,6 +65,8 @@ echo "MODULES=most" > /etc/initramfs-tools/conf.d/rg353v
 update-initramfs -c -k "$KV" >/dev/null
 cp /boot/initrd.img-"$KV" /boot/initrd.img
 systemctl enable iwd systemd-resolved systemd-timesyncd ssh rglauncher usb-net wifi-check rg353-pad rg353-audio rg353-power no-fbcon bluealsa bt-settings >/dev/null 2>&1
+# bluealsa-aplay plays a phone's music on the handheld (A2DP sink) - not needed for headphones
+systemctl mask bluealsa-aplay >/dev/null 2>&1
 systemctl mask getty@tty1 >/dev/null 2>&1
 passwd -l root >/dev/null
 rm -f /etc/apt/apt.conf.d/00rg353
