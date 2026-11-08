@@ -77,6 +77,10 @@ and the ext4 `rootfs`. U-Boot runs `/boot/boot.scr` (source `os/files/boot/boot.
 - If `boot.scr` itself fails, U-Boot finds `/boot/extlinux/extlinux.conf` on the rootfs
   partition and boots the full kernel from there (`rgboot=fallback` on the command line).
 
+U-Boot's `bootdelay` is patched from 2 to 0 (`os/uboot-bootdelay0.py`, which also updates the
+SHA-256 the SPL checks); the original area is in `/storage/.backup/uboot-itb-area.orig`.
+The boot logo (`os/splash/`) is in the console framebuffer about 3 s after power-on.
+
 The eMMC boot area is zeroed so the SoC boots from SD. Back to Android: power off,
 remove the SD card, connect USB, power on (maskrom) and write
 `~/rg353-backup/emmc-first-8MB.img` at sector 0 and `emmc-uboot-mmcblk0p2.img` at
