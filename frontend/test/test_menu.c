@@ -6,17 +6,25 @@
 
 int main(void) {
     Menu m;
-    menu_init(&m, true, 0);
+    menu_init(&m, true, 0, false);
     CHECK_INT(m.nitems, 4);
     CHECK_INT(m.items[0], M_CONTINUE); CHECK_INT(m.items[1], M_SAVE);
     CHECK_INT(m.items[2], M_LOAD); CHECK_INT(m.items[3], M_QUIT);
     CHECK_INT(m.sel, 0);
 
-    menu_init(&m, false, 0);
+    menu_init(&m, false, 0, false);
     CHECK_INT(m.nitems, 2);
     CHECK_INT(m.items[0], M_CONTINUE); CHECK_INT(m.items[1], M_QUIT);
 
-    menu_init(&m, true, 4);
+    /* no savestates but the game has its own save menu (ScummVM): offer that instead */
+    menu_init(&m, false, 0, true);
+    CHECK_INT(m.nitems, 3);
+    CHECK_INT(m.items[1], M_GAMEMENU);
+    CHECK_STR(menu_label(M_GAMEMENU), "Speichern / Laden");
+    m.sel = 1;
+    CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_GAMEMENU);
+
+    menu_init(&m, true, 4, false);
     CHECK_INT(m.slot, 4);                                       /* remembers the last slot */
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_UP), M_NONE); /* wraps to the last item */
     CHECK_INT(m.sel, 3);
@@ -37,7 +45,7 @@ int main(void) {
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_B), M_CONTINUE);
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_X), M_NONE);
     /* a failed save/load keeps the menu open with a message until the next key */
-    menu_init(&m, true, 0);
+    menu_init(&m, true, 0, false);
     CHECK(m.msg == NULL);
     menu_failed(&m, M_SAVE);
     CHECK_STR(m.msg, "Speichern fehlgeschlagen");

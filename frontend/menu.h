@@ -4,7 +4,7 @@
 #include "ui.h"
 #include "libretro.h"
 
-typedef enum { M_NONE, M_CONTINUE, M_SAVE, M_LOAD, M_QUIT } MenuAction;
+typedef enum { M_NONE, M_CONTINUE, M_SAVE, M_LOAD, M_GAMEMENU, M_QUIT } MenuAction;
 
 typedef struct {
     int sel, slot, nitems;
@@ -15,7 +15,8 @@ typedef struct {
 
 #define MENU_SLOTS 9
 
-void menu_init(Menu *m, bool can_state, int last_slot);
+/* game_menu: no savestates, but the game has its own save/load menu (ScummVM, F5) */
+void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu);
 /* RetroPad button pressed: action on A (the selected item), M_CONTINUE on B, else M_NONE */
 MenuAction menu_key(Menu *m, int retro_id);
 const char *menu_label(MenuAction a);

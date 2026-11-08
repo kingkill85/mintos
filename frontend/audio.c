@@ -12,6 +12,7 @@ static double core_rate, cur_rate;
 static int underruns;
 static bool paused, primed, playing;   /* playing: device started after the prefill */
 static int16_t outbuf[8192 * 2];
+static Fade fade;                    /* fade-in after every (re)start */
 
 int audio_open(double rate) {
     if (!SDL_WasInit(SDL_INIT_AUDIO) && SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) return -1;
@@ -20,6 +21,7 @@ int audio_open(double rate) {
     if (!dev) return -1;
     core_rate = cur_rate = rate;
     rs = (Resampler){0};
+    fade_start(&fade, OUT_RATE * 30 / 1000);
     playing = false;            /* started in audio_push once TARGET is queued */
     return 0;
 }
@@ -35,6 +37,7 @@ size_t audio_push(const int16_t *s, size_t frames) {
      * yields more output (and the other way round) */
     cur_rate = core_rate / rate_adjust(q, TARGET);
     size_t n = resample(&rs, s, frames, cur_rate / OUT_RATE, outbuf, sizeof outbuf / 4);
+    fade_apply(&fade, outbuf, n);
     SDL_QueueAudio(dev, outbuf, (Uint32)(n * 4));
     primed = true;
     if (!playing && !paused && SDL_GetQueuedAudioSize(dev) >= TARGET) {
@@ -57,6 +60,7 @@ void audio_pause(bool on) {
     SDL_PauseAudioDevice(dev, 1);
     playing = false;
     if (on) { SDL_ClearQueuedAudio(dev); primed = false; }
+    else fade_start(&fade, OUT_RATE * 30 / 1000);
 }
 
 void audio_close(void) {

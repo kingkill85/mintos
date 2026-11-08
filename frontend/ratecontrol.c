@@ -23,3 +23,13 @@ size_t resample(Resampler *r, const int16_t *in, size_t n, double step, int16_t 
     r->pos -= n;
     return k;
 }
+
+void fade_start(Fade *f, int frames) { f->total = f->left = frames; }
+
+void fade_apply(Fade *f, int16_t *s, size_t frames) {
+    for (size_t i = 0; i < frames && f->left > 0; i++, f->left--) {
+        double g = (double)(f->total - f->left) / f->total;
+        s[2 * i] = (int16_t)(s[2 * i] * g);
+        s[2 * i + 1] = (int16_t)(s[2 * i + 1] * g);
+    }
+}

@@ -31,6 +31,7 @@ static SystemCfg cfg;
 static Ui ui;
 static const char *rom;
 static char title[256];
+static bool gamemenu_pending;   /* send F5 to the core once the game runs again */
 
 static void on_video(const void *d, unsigned w, unsigned h, size_t pitch) { video_frame(d, w, h, pitch, core.fmt); }
 static float aspect(void) { return core.av.geometry.aspect_ratio; }
@@ -75,7 +76,7 @@ static int error_page(void) {
 /* the menu; returns false when the game should end */
 static bool run_menu(int *slot) {
     Menu m;
-    menu_init(&m, core.can_state, *slot);
+    menu_init(&m, core.can_state, *slot, core.keyboard != NULL);
     audio_pause(true);
     input_clear();
     SDL_Texture *pv = NULL;
@@ -100,6 +101,11 @@ static bool run_menu(int *slot) {
                 if (state_exists(rom, m.slot)) {
                     if (state_load(&core, rom, m.slot)) open = false; else menu_failed(&m, M_LOAD);
                 }
+                break;
+            case M_GAMEMENU:
+                /* the game's own save/load menu (ScummVM: Ctrl+F5, works everywhere), after the menu closes */
+                gamemenu_pending = true;
+                open = false;
                 break;
             case M_QUIT: open = false; keep = false; break;
             default: break;
@@ -169,6 +175,12 @@ int main(int argc, char **argv) {
     while (!quit_signal) {
         if (input_poll() && !run_menu(&slot)) break;
         Uint32 t_a = SDL_GetTicks();
+        if (gamemenu_pending && core.keyboard) {
+            static int step;
+            /* key down on one frame, up on the next */
+            core.keyboard(step == 0, RETROK_F5, 0, RETROKMOD_CTRL);   /* ScummVM global menu */
+            if (++step == 2) { step = 0; gamemenu_pending = false; }
+        }
         core_run(&core);
         Uint32 t_b = SDL_GetTicks();
         if (first && resume) state_load(&core, rom, -1);

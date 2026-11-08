@@ -1,9 +1,10 @@
 #include "menu.h"
 
-void menu_init(Menu *m, bool can_state, int last_slot) {
+void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
     *m = (Menu){.can_state = can_state, .slot = last_slot >= 0 && last_slot < MENU_SLOTS ? last_slot : 0};
     m->items[m->nitems++] = M_CONTINUE;
     if (can_state) { m->items[m->nitems++] = M_SAVE; m->items[m->nitems++] = M_LOAD; }
+    else if (game_menu) m->items[m->nitems++] = M_GAMEMENU;
     m->items[m->nitems++] = M_QUIT;
 }
 
@@ -33,6 +34,7 @@ const char *menu_label(MenuAction a) {
     case M_CONTINUE: return "Weiter";
     case M_SAVE: return "Speichern";
     case M_LOAD: return "Laden";
+    case M_GAMEMENU: return "Speichern / Laden";
     case M_QUIT: return "Beenden";
     default: return "";
     }
