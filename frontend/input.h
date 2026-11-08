@@ -6,6 +6,8 @@
 #include "inputmap.h"
 
 #define PAD_NAME "RG353V Gamepad"
+/* game controllers in use (built-in + external) */
+int input_pads(void);
 
 void input_open(void);
 bool input_poll(void);            /* pumps events; true when F (GUIDE) was pressed */

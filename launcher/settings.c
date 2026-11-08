@@ -2,6 +2,7 @@
  *   Einstellungen: Helligkeit, Lautstärke, WLAN ›, Spiel-Optionen ›, Bildschirm aus, Info ›,
  *                  Neustart, Ausschalten
  *   WLAN: on/off, networks (A connects, X forgets; new networks ask for the password)
+ *   Bluetooth: on/off, devices (A pairs+connects / disconnects, X forgets)
  *   Spiel-Optionen: systems › Bild/Filter/Rahmen; Info: read-only lines
  * Slow commands (mintos-wifi) run as background jobs; settings_poll() picks up the result. */
 #include "settings.h"
@@ -24,9 +25,10 @@
 #endif
 
 typedef enum { I_BRIGHT, I_VOLUME, I_WIFI, I_GAMEOPTS, I_SCREENOFF, I_INFO, I_REBOOT, I_POWEROFF, I_TEXT, I_SYSTEM,
-               I_GAMEOPT, I_WIFI_POWER, I_NET } ItemId;
-typedef enum { P_MAIN, P_INFO, P_SYSTEMS, P_GAME, P_WIFI } Page;
-enum { J_STATUS = 1, J_LIST, J_SCAN, J_CONNECT, J_FORGET, J_POWER };
+               I_GAMEOPT, I_WIFI_POWER, I_NET, I_BT, I_BT_POWER, I_DEV } ItemId;
+typedef enum { P_MAIN, P_INFO, P_SYSTEMS, P_GAME, P_WIFI, P_BT } Page;
+enum { J_STATUS = 1, J_LIST, J_SCAN, J_CONNECT, J_FORGET, J_POWER,
+       B_STATUS, B_LIST, B_SCAN, B_CONNECT, B_DISCONNECT, B_FORGET, B_POWER };
 
 typedef struct { ItemId id; char label[64]; char value[96]; int bar, arg, sig; } Item;   /* bar 0..10, sig 0..4, -1 none */
 
@@ -43,6 +45,15 @@ static Net nets[32];
 static int nnets, wifi_powered = -1, scanned, kb_on, net_sel;
 static char wifi_ssid[64], wifi_state[24];
 static Kb kb;
+
+/* Bluetooth as last reported by mintos-bt */
+typedef struct { char mac[18], name[64], kind[8]; int paired, connected; } Dev;
+static Dev devs[32];
+static int ndevs, bt_powered = -1, bt_scanned;
+
+/* background work: one queued user action (runs first), then whatever the open page needs */
+static struct { int kind, has; char cmd[400], input[KB_MAX + 2]; } pend;
+static int need_ws, need_wl, need_wscan, need_bs, need_bl, need_bscan;
 
 void settings_set_systems(const char *const *dirs, const char *const *names, int n) {
     sys_dirs = dirs; sys_names = names; nsys = n;
@@ -106,6 +117,10 @@ static void build(void) {
         it = add(I_WIFI, "WLAN");
         snprintf(it->value, sizeof it->value, "%s", wifi_powered == 0 ? "Aus" : *wifi_ssid ? wifi_ssid
                  : wifi_powered < 0 ? "" : "Nicht verbunden");
+        it = add(I_BT, "Bluetooth");
+        const char *bc = NULL;
+        for (int i = 0; i < ndevs; i++) if (devs[i].connected) { bc = devs[i].name; break; }
+        snprintf(it->value, sizeof it->value, "%s", bt_powered == 0 ? "Aus" : bc ? bc : bt_powered < 0 ? "" : "An");
         add(I_GAMEOPTS, "Spiel-Optionen");
         it = add(I_SCREENOFF, "Bildschirm aus");
         snprintf(it->value, sizeof it->value, "%s", OFF_TXT[off_index()]);
@@ -124,6 +139,18 @@ static void build(void) {
             }
             if (!scanned) add(I_TEXT, "Suche Netze ...");
             else if (!nnets) add(I_TEXT, "Keine Netze gefunden");
+        }
+    } else if (page == P_BT) {
+        Item *it = add(I_BT_POWER, "Bluetooth");
+        snprintf(it->value, sizeof it->value, "%s", bt_powered ? "An" : "Aus");
+        if (bt_powered) {
+            for (int i = 0; i < ndevs; i++) {
+                it = add(I_DEV, devs[i].name);
+                it->arg = i;
+                snprintf(it->value, sizeof it->value, "%s", devs[i].connected ? "Verbunden" : devs[i].paired ? "Gekoppelt"
+                         : !strcmp(devs[i].kind, "audio") ? "Audio" : !strcmp(devs[i].kind, "input") ? "Controller" : "");
+            }
+            add(I_TEXT, bt_scanned ? "Neu suchen" : "Suche Geräte ...");
         }
     } else if (page == P_SYSTEMS) {
         for (int i = 0; i < nsys && nitems < 64; i++)
@@ -156,10 +183,61 @@ static void build(void) {
     if (sel < 0) sel = 0;
 }
 
-static void wifi_job(int kind, const char *args, const char *input) {
-    char cmd[400];
-    snprintf(cmd, sizeof cmd, "/usr/local/sbin/mintos-wifi %s", args);
-    job_start(kind, cmd, input);
+static void kick(void);
+
+/* a user action: queued, runs as soon as the current job (e.g. an 11 s scan) is done */
+static void request(int kind, const char *tool, const char *args, const char *input) {
+    pend.kind = kind; pend.has = 1;
+    snprintf(pend.cmd, sizeof pend.cmd, "/usr/local/sbin/%s %s", tool, args);
+    snprintf(pend.input, sizeof pend.input, "%s", input ? input : "");
+    pend.has = input ? 2 : 1;
+    kick();
+}
+static void wifi_job(int kind, const char *args, const char *input) { request(kind, "mintos-wifi", args, input); }
+static void bt_job(int kind, const char *args) { request(kind, "mintos-bt", args, NULL); }
+
+static void kick(void) {
+    if (job_busy()) return;
+    if (pend.has) {
+        if (!job_start(pend.kind, pend.cmd, pend.has == 2 ? pend.input : NULL)) {
+            memset(pend.input, 0, sizeof pend.input);
+            pend.has = 0;
+        }
+        return;
+    }
+    const char *w = "/usr/local/sbin/mintos-wifi", *b = "/usr/local/sbin/mintos-bt";
+    char cmd[100];
+#define RUN(flag, kind, tool, args) if (flag) { snprintf(cmd, sizeof cmd, "%s %s", tool, args); \
+        if (!job_start(kind, cmd, NULL)) flag = 0; return; }
+    RUN(need_ws, J_STATUS, w, "status");
+    RUN(need_bs, B_STATUS, b, "status");
+    if (page == P_WIFI && wifi_powered > 0) {
+        RUN(need_wl, J_LIST, w, "list --cached");
+        RUN(need_wscan, J_SCAN, w, "list");
+    }
+    if ((page == P_BT || page == P_MAIN) && bt_powered > 0) RUN(need_bl, B_LIST, b, "list");
+    if (page == P_BT && bt_powered > 0) RUN(need_bscan, B_SCAN, b, "list --scan");
+#undef RUN
+}
+
+/* "mac<TAB>name<TAB>kind<TAB>paired<TAB>connected" lines */
+static void parse_devs(const char *out) {
+    ndevs = 0;
+    char line[256];
+    for (const char *p = out; *p && ndevs < 32;) {
+        size_t n = strcspn(p, "\n");
+        snprintf(line, sizeof line, "%.*s", (int)(n < sizeof line ? n : sizeof line - 1), p);
+        p += n + (p[n] == '\n');
+        char *f[5], *save = NULL, *t = line;
+        int nf = 0;
+        while (nf < 5 && (f[nf] = strtok_r(t, "\t", &save))) { nf++; t = NULL; }
+        if (nf < 5) continue;
+        Dev *d = &devs[ndevs++];
+        snprintf(d->mac, sizeof d->mac, "%s", f[0]);
+        snprintf(d->name, sizeof d->name, "%s", f[1]);
+        snprintf(d->kind, sizeof d->kind, "%s", f[2]);
+        d->paired = atoi(f[3]); d->connected = atoi(f[4]);
+    }
 }
 
 /* "name<TAB>type<TAB>bars<TAB>known<TAB>connected" lines */
@@ -202,31 +280,39 @@ int settings_poll(void) {
     const char *out;
     if (!job_take(&kind, &rc, &out)) return 0;
     switch (kind) {
-    case J_STATUS:
-        parse_status(out);
-        if (page == P_WIFI && wifi_powered) wifi_job(J_LIST, "list --cached", NULL);
-        break;
+    case J_STATUS: parse_status(out); break;
     case J_LIST: case J_SCAN:
         if (rc == 0) parse_nets(out);
         if (kind == J_SCAN) scanned = 1;
-        else if (page == P_WIFI && !scanned) wifi_job(J_SCAN, "list", NULL);
         break;
     case J_CONNECT:
         if (rc) set_msg(out, "Verbindung fehlgeschlagen");
         else { snprintf(msg, sizeof msg, "Verbunden"); status = msg; }
-        wifi_job(J_STATUS, "status", NULL);
+        need_ws = need_wl = 1;
         break;
-    case J_FORGET: case J_POWER:
-        wifi_job(J_STATUS, "status", NULL);
+    case J_FORGET: case J_POWER: need_ws = need_wl = 1; break;
+    case B_STATUS: { const char *p = strstr(out, "powered="); bt_powered = p ? atoi(p + 8) : 0; break; }
+    case B_LIST: case B_SCAN:
+        if (rc == 0) parse_devs(out);
+        if (kind == B_SCAN) bt_scanned = 1;
         break;
+    case B_CONNECT:
+        if (rc) set_msg(out, "Verbindung fehlgeschlagen");
+        else { snprintf(msg, sizeof msg, "Verbunden"); status = msg; }
+        need_bl = 1;
+        break;
+    case B_DISCONNECT: case B_FORGET: need_bl = 1; break;
+    case B_POWER: need_bs = need_bl = 1; break;
     }
+    kick();
     build();
     return 1;
 }
 
 void settings_open(void) {
     page = P_MAIN; sel = 0; confirm = 0; status = NULL; kb_on = 0;
-    if (!job_busy()) wifi_job(J_STATUS, "status", NULL);
+    need_ws = need_bs = need_bl = 1;   /* main page shows the network and the connected device */
+    kick();
     build();
 }
 
@@ -239,6 +325,7 @@ const char *settings_title(void) {
         if (!kb_on) return "Einstellungen › WLAN";
         snprintf(title, sizeof title, "WLAN › %s", nets[net_sel].name);
         return title;
+    case P_BT: return "Einstellungen › Bluetooth";
     default: return "Einstellungen";
     }
 }
@@ -257,14 +344,18 @@ void settings_hints(Ui *ui) {
     Item *it = &items[sel];
     const char *a = NULL;
     switch (it->id) {
-    case I_INFO: case I_GAMEOPTS: case I_SYSTEM: case I_WIFI: a = "ÖFFNEN"; break;
+    case I_INFO: case I_GAMEOPTS: case I_SYSTEM: case I_WIFI: case I_BT: a = "ÖFFNEN"; break;
+    case I_DEV: a = devs[it->arg].connected ? "TRENNEN" : "VERBINDEN"; break;
+    case I_TEXT: a = page == P_BT && bt_scanned ? "SUCHEN" : NULL; break;
     case I_REBOOT: case I_POWEROFF: a = "OK"; break;
     case I_NET: a = nets[it->arg].connected ? NULL : "VERBINDEN"; break;
     default: break;
     }
     const char *h[3][2] = {{"B", "ZURÜCK"}};
     int n = 1;
-    if (it->id == I_NET && nets[it->arg].known) { h[n][0] = "X"; h[n][1] = "VERGESSEN"; n++; }
+    if ((it->id == I_NET && nets[it->arg].known) || (it->id == I_DEV && devs[it->arg].paired)) {
+        h[n][0] = "X"; h[n][1] = "VERGESSEN"; n++;
+    }
     if (a) { h[n][0] = "A"; h[n][1] = a; n++; }
     ui_hints(ui, 0, ui->w - PAD, h, n);
 }
@@ -294,12 +385,17 @@ static void change(Item *it, int d) {
         gameopt_set(USER_CONFIG_FILE, dir, it->arg, cycle(gameopt_get(USER_CONFIG_FILE, dir, it->arg), d, n));
         break;
     }
+    case I_BT_POWER:
+        kv_set(SETTINGS_FILE, "bt", bt_powered ? "off" : NULL);
+        bt_job(B_POWER, bt_powered ? "power off" : "power on");
+        bt_powered = !bt_powered;
+        ndevs = 0; bt_scanned = 0; need_bscan = bt_powered;
+        break;
     case I_WIFI_POWER:
-        if (job_busy()) break;
         kv_set(SETTINGS_FILE, "wifi", wifi_powered ? "off" : NULL);
         wifi_job(J_POWER, wifi_powered ? "power off" : "power on", NULL);
         wifi_powered = !wifi_powered;
-        nnets = 0; scanned = 0;
+        nnets = 0; scanned = 0; need_wscan = wifi_powered;
         break;
     default: break;
     }
@@ -337,7 +433,7 @@ int settings_key(int nav) {
     case NAV_B:
         if (page == P_MAIN) return 1;
         if (page == P_GAME) { page = P_SYSTEMS; sel = sys_sel; }
-        else if (page == P_WIFI) { page = P_MAIN; sel = main_sel; if (!job_busy()) wifi_job(J_STATUS, "status", NULL); }
+        else if (page == P_WIFI || page == P_BT) { page = P_MAIN; sel = main_sel; need_ws = need_bs = 1; }
         else { page = P_MAIN; sel = main_sel; }
         break;
     case NAV_A:
@@ -345,9 +441,21 @@ int settings_key(int nav) {
         else if (items[sel].id == I_GAMEOPTS) { main_sel = sel; page = P_SYSTEMS; sel = 0; }
         else if (items[sel].id == I_WIFI) {
             main_sel = sel; page = P_WIFI; sel = 0; scanned = 0;
-            if (!job_busy()) wifi_job(J_STATUS, "status", NULL);
-        } else if (items[sel].id == I_WIFI_POWER) change(&items[sel], 1);
-        else if (items[sel].id == I_NET && !job_busy()) {
+            need_ws = need_wl = need_wscan = 1;
+        } else if (items[sel].id == I_BT) {
+            main_sel = sel; page = P_BT; sel = 0; bt_scanned = 0;
+            need_bs = need_bl = need_bscan = 1;
+        } else if (items[sel].id == I_WIFI_POWER || items[sel].id == I_BT_POWER) change(&items[sel], 1);
+        else if (items[sel].id == I_DEV) {
+            Dev *d = &devs[items[sel].arg];
+            char args[64];
+            snprintf(args, sizeof args, "%s %s", d->connected ? "disconnect" : "connect", d->mac);
+            snprintf(msg, sizeof msg, d->connected ? "Trenne %s ..." : "Verbinde mit %s ...", d->name);
+            status = msg;
+            bt_job(d->connected ? B_DISCONNECT : B_CONNECT, args);
+        } else if (items[sel].id == I_TEXT && page == P_BT) {
+            bt_scanned = 0; need_bscan = 1;   /* search again */
+        } else if (items[sel].id == I_NET) {
             Net *n = &nets[items[sel].arg];
             if (n->connected) break;
             if (!n->known && !strcmp(n->type, "psk")) { net_sel = items[sel].arg; kb_init(&kb); kb_on = 1; status = NULL; }
@@ -367,7 +475,15 @@ int settings_key(int nav) {
         }
         break;
     case NAV_X:
-        if (items[sel].id == I_NET && nets[items[sel].arg].known && !job_busy()) {
+        if (items[sel].id == I_DEV && devs[items[sel].arg].paired) {
+            if (!was_confirm) { confirm = 1; snprintf(msg, sizeof msg, "Nochmal X zum Vergessen"); status = msg; break; }
+            confirm = 0;
+            char args[64];
+            snprintf(args, sizeof args, "forget %s", devs[items[sel].arg].mac);
+            bt_job(B_FORGET, args);
+            snprintf(msg, sizeof msg, "Vergessen"); status = msg;
+        }
+        if (items[sel].id == I_NET && nets[items[sel].arg].known) {
             if (!was_confirm) { confirm = 1; snprintf(msg, sizeof msg, "Nochmal X zum Vergessen"); status = msg; break; }
             confirm = 0;
             char q[200], args[260];
@@ -375,10 +491,10 @@ int settings_key(int nav) {
             snprintf(args, sizeof args, "forget %s", q);
             wifi_job(J_FORGET, args, NULL);
             snprintf(msg, sizeof msg, "Vergessen"); status = msg;
-            nnets = 0; scanned = 0;
         }
         break;
     }
+    kick();
     build();
     return 0;
 }
@@ -415,13 +531,13 @@ void settings_draw(Ui *ui, int y0, int rows) {
         } else if (it->value[0]) {
             int maxw = (ui->w - 2 * PAD) / 2 + 40;
             char v[110];
-            int lr = it->id == I_SCREENOFF || it->id == I_GAMEOPT || it->id == I_WIFI_POWER;   /* left/right changes it */
+            int lr = it->id == I_SCREENOFF || it->id == I_GAMEOPT || it->id == I_WIFI_POWER || it->id == I_BT_POWER;   /* left/right changes it */
             snprintf(v, sizeof v, on && lr ? "< %s >" : "%s", it->value);
             int vw = ui_text_w(ui->small, v);
             if (vw > maxw) vw = maxw;
             ui_text(ui, ui->small, v, right - vw, cy, lr ? fg : dim, maxw);
             right -= vw + 16;
-        } else if (it->id == I_INFO || it->id == I_GAMEOPTS || it->id == I_SYSTEM || it->id == I_WIFI) {
+        } else if (it->id == I_INFO || it->id == I_GAMEOPTS || it->id == I_SYSTEM || it->id == I_WIFI || it->id == I_BT) {
             ui_text(ui, ui->big, "›", right - ui_text_w(ui->big, "›"), cy, dim, 40);
         }
         ui_text(ui, ui->big, it->label, PAD + 24, cy, fg, right - PAD - 24);

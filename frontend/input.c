@@ -1,17 +1,38 @@
 #include "input.h"
+#include <stdio.h>
 #include <string.h>
 
-static SDL_GameController *pad;
+/* the built-in pad (rg353-pad's merged uinput device) plus external ones (Bluetooth/USB),
+ * all as player 1; the raw built-in devices behind the merged one are left alone */
+static SDL_GameController *pads[8];
+static int npads;
 static uint16_t held;              /* bit per RETRO_DEVICE_ID_JOYPAD_* */
 static int16_t axis[4];            /* left x/y, right x/y */
 static int presses[16], npress;
 static retro_keyboard_event_t keyboard;
 
 static void try_open(int index) {
-    if (pad || !SDL_IsGameController(index)) return;
+    if (npads >= 8 || !SDL_IsGameController(index)) return;
     const char *n = SDL_GameControllerNameForIndex(index);
-    if (n && !strcmp(n, PAD_NAME)) pad = SDL_GameControllerOpen(index);
+    if (n && (!strcmp(n, "adc-joystick") || !strncmp(n, "gpio-keys", 9) || !strcmp(n, "adc-keys"))) return;
+    SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(index);
+    for (int i = 0; i < npads; i++)
+        if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[i])) == id) return;   /* already open */
+    SDL_GameController *c = SDL_GameControllerOpen(index);
+    if (c) { pads[npads++] = c; fprintf(stderr, "controller: %s\n", n ? n : "?"); }
 }
+
+static void closed(SDL_JoystickID id) {
+    for (int i = 0; i < npads; i++)
+        if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[i])) == id) {
+            SDL_GameControllerClose(pads[i]);
+            pads[i] = pads[--npads];
+            held = 0;   /* buttons held on the pad that left */
+            return;
+        }
+}
+
+int input_pads(void) { return npads; }
 
 void input_open(void) {
     SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
@@ -43,6 +64,7 @@ bool input_poll(void) {
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_CONTROLLERDEVICEADDED: try_open(e.cdevice.which); break;
+        case SDL_CONTROLLERDEVICEREMOVED: closed(e.cdevice.which); break;
         case SDL_CONTROLLERBUTTONDOWN:
             if (e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) menu = true;
             else press(map_button(e.cbutton.button));

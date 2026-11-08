@@ -5,8 +5,13 @@
   leaves "Playback Mux" on HP, so the speaker stays silent. The jack state is the ALSA
   card control "Headphones Jack"; changes arrive as SW_HEADPHONE_INSERT events.
 - Volume buttons (gpio-keys-vol) change "Master" in 5 % steps; holding repeats.
+- Bluetooth headphones (bluealsa): while one is connected, ALSA's default device points to it
+  (/run/mintos/asound-bt.conf, loaded by /etc/asound.conf) and the volume buttons change its
+  volume. A game picks the device up when it starts.
 """
 import asyncio
+import os
+import re
 import subprocess
 import evdev
 from evdev import ecodes as e
@@ -22,6 +27,67 @@ def route():
     print("audio ->", out, flush=True)
 
 
+BT_CONF = "/run/mintos/asound-bt.conf"
+bt_current = None   # bluealsa PCM path of the connected headphones
+
+
+def bt_sink(pcms):
+    """the playback PCM (we are the A2DP source) from `bluealsa-cli list-pcms`"""
+    return next((p for p in pcms.split() if p.endswith("/a2dpsrc/sink")), None)
+
+
+def bt_mac(path):
+    m = re.search(r"dev_((?:[0-9A-F]{2}_){5}[0-9A-F]{2})", path)
+    return m.group(1).replace("_", ":") if m else ""
+
+
+def bt_conf(mac):
+    return 'pcm.!default {\n  type plug\n  slave.pcm "bluealsa:DEV=%s,PROFILE=a2dp"\n}\n' % mac
+
+
+def bt_volume_parse(out):
+    m = re.search(r"Volume:\D*(\d+)", out)
+    return int(m.group(1)) if m else None
+
+
+def step(v, d):
+    return max(0, min(127, v + 6 * d))
+
+
+def run(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+async def bt_watch():
+    global bt_current
+    while True:
+        sink = bt_sink(run("bluealsa-cli", "list-pcms"))
+        if sink != bt_current:
+            bt_current = sink
+            if sink:
+                os.makedirs(os.path.dirname(BT_CONF), exist_ok=True)
+                with open(BT_CONF + ".tmp", "w") as f:
+                    f.write(bt_conf(bt_mac(sink)))
+                os.replace(BT_CONF + ".tmp", BT_CONF)
+                print("audio -> bluetooth", bt_mac(sink), flush=True)
+            else:
+                try:
+                    os.unlink(BT_CONF)
+                except FileNotFoundError:
+                    pass
+                print("audio -> device", flush=True)
+        await asyncio.sleep(2)
+
+
+def bt_volume(d):
+    v = bt_volume_parse(run("bluealsa-cli", "volume", bt_current))
+    if v is not None:
+        run("bluealsa-cli", "volume", bt_current, str(step(v, d)))
+
+
 async def jack(dev):
     async for ev in dev.async_read_loop():
         if ev.type == e.EV_SW and ev.code == e.SW_HEADPHONE_INSERT:
@@ -31,10 +97,11 @@ async def jack(dev):
 async def volume(dev):
     async for ev in dev.async_read_loop():
         if ev.type == e.EV_KEY and ev.value in (1, 2):  # press or autorepeat
-            if ev.code == e.KEY_VOLUMEUP:
-                amixer("-q", "sset", "Master", "5%+")
-            elif ev.code == e.KEY_VOLUMEDOWN:
-                amixer("-q", "sset", "Master", "5%-")
+            d = 1 if ev.code == e.KEY_VOLUMEUP else -1 if ev.code == e.KEY_VOLUMEDOWN else 0
+            if d and bt_current:
+                bt_volume(d)
+            elif d:
+                amixer("-q", "sset", "Master", "5%+" if d > 0 else "5%-")
 
 
 async def main():
@@ -42,6 +109,7 @@ async def main():
     route()
     tasks = [jack(d) for n, d in devs.items() if n.endswith("Headphones")]
     tasks += [volume(d) for n, d in devs.items() if n == "gpio-keys-vol"]
+    tasks.append(bt_watch())
     await asyncio.gather(*tasks)
 
 

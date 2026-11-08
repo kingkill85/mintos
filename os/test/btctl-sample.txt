@@ -1,0 +1,52 @@
+Device 62:C0:B2:61:C8:F8 62-C0-B2-61-C8-F8
+Device 55:59:79:CD:B9:E2 55-59-79-CD-B9-E2
+Device 7D:1B:16:C1:F1:DE 7D-1B-16-C1-F1-DE
+Device 03:4F:7F:4A:BA:07 03-4F-7F-4A-BA-07
+Device 08:EF:3B:64:7A:34 LG LAC553B(34)
+Device 7D:D9:56:90:F8:08 7D-D9-56-90-F8-08
+Device 4B:F6:0F:1F:47:07 4B-F6-0F-1F-47-07
+Device 50:01:E2:2C:18:91 50-01-E2-2C-18-91
+Device 79:CA:4B:3B:C0:A3 79-CA-4B-3B-C0-A3
+Device C0:48:E6:84:EC:C2 [TV] Samsung Q6 Series (55)
+Device 7C:CA:9F:52:40:BB 7C-CA-9F-52-40-BB
+Device 2E:F4:41:EB:4E:E1 2E-F4-41-EB-4E-E1
+Device C9:35:34:37:1F:47 Govee_H6199_1F47
+Device 3C:2E:F5:AE:2E:7B ResMed 732807
+Device BE:16:FC:51:04:A4 MELK-OA21P  A4
+Device 4E:7D:BA:EB:6D:2C 4E-7D-BA-EB-6D-2C
+Device 62:C0:B2:61:C8:F8 (random)
+	Alias: 62-C0-B2-61-C8-F8
+	Paired: no
+	Bonded: no
+	Trusted: no
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	ManufacturerData.Key: 0x0075 (117)
+	ManufacturerData.Value:
+  22 38 38 1d bf c5 97 7e                          "88....~        
+	AdvertisingFlags:
+  02                                               .               
+Device 55:59:79:CD:B9:E2 (random)
+	Alias: 55-59-79-CD-B9-E2
+	Paired: no
+	Bonded: no
+	Trusted: no
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	AdvertisingFlags:
+  02                                               .               
+Device 7D:1B:16:C1:F1:DE (random)
+	Alias: 7D-1B-16-C1-F1-DE
+	Paired: no
+	Bonded: no
+	Trusted: no
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	ManufacturerData.Key: 0x004c (76)
+	ManufacturerData.Value:
+  10 06 4a 1d 4d 9f 8c 28                          ..J.M..(        
+	AdvertisingFlags:
+  1a                                               .               

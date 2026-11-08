@@ -1,0 +1,11 @@
+[Unit]
+Description=Bluetooth off if switched off in the settings
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mintos-bt boot
+
+[Install]
+WantedBy=multi-user.target

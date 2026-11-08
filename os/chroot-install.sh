@@ -33,7 +33,7 @@ apt-get install -y --no-install-recommends \
   less nano procps psmisc alsa-utils e2fsprogs dosfstools util-linux bash-completion \
   retroarch libretro-gambatte libretro-mgba libretro-nestopia libretro-snes9x libretro-genesisplusgx \
   scummvm libsdl2-2.0-0 libsdl2-ttf-2.0-0 libgl1-mesa-dri libegl1 libgles2 libgbm1 mesa-utils \
-  fonts-dejavu-core python3-minimal python3-evdev libopengl0 kexec-tools libsdl2-image-2.0-0 unzip 7zip bluez
+  fonts-dejavu-core python3-minimal python3-evdev libopengl0 kexec-tools libsdl2-image-2.0-0 unzip 7zip bluez bluez-alsa-utils libasound2-plugin-bluez
 apt-get clean
 echo INSTALL_OK
 '
