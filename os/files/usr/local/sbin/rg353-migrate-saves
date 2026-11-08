@@ -1,0 +1,24 @@
+#!/bin/sh
+# One-time move of RetroArch-style saves next to the ROMs into rgarch's folders:
+#   roms/<sys>/X.srm|.rtc        -> saves/<sys>/X.srm|.rtc
+#   roms/<sys>/X.state[N][.png]  -> states/<sys>/X.st<N|0>[.png]
+#   roms/<sys>/X.state.auto      -> states/<sys>/X.auto
+# Existing targets are kept (the source stays). Safe to run again. ROOT= prefixes paths.
+R="${ROOT:-}/storage"
+for dir in "$R"/roms/*/; do
+  sys=$(basename "$dir")
+  find "$dir" -maxdepth 1 -type f \( -name '*.srm' -o -name '*.rtc' -o -name '*.state*' \) | while IFS= read -r f; do
+    b=$(basename "$f")
+    case "$b" in
+      *.srm|*.rtc)        to="$R/saves/$sys/$b" ;;
+      *.state.auto)       to="$R/states/$sys/${b%.state.auto}.auto" ;;
+      *.state.png)        to="$R/states/$sys/${b%.state.png}.st0.png" ;;
+      *.state)            to="$R/states/$sys/${b%.state}.st0" ;;
+      *.state[1-8].png)   n=${b%.png}; n=${n##*.state}; to="$R/states/$sys/${b%.state*}.st$n.png" ;;
+      *.state[1-8])       n=${b##*.state}; to="$R/states/$sys/${b%.state*}.st$n" ;;
+      *) continue ;;
+    esac
+    [ -e "$to" ] && { echo "keep  $f (exists: $to)"; continue; }
+    mkdir -p "$(dirname "$to")" && mv "$f" "$to" && echo "moved $f -> $to"
+  done
+done

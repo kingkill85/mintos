@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 OUT=build/host-tests; mkdir -p "$OUT"
 names=("$@"); [ ${#names[@]} -eq 0 ] && names=($(ls frontend/test/test_*.c | sed 's|.*/test_||; s|\.c$||'))
-export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy REPO="$PWD"
 fail=0
 for n in "${names[@]}"; do
   src=frontend/test/test_$n.c
