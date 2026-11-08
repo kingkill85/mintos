@@ -12,4 +12,5 @@ void audio_wait(void);
 void audio_pause(bool on);
 void audio_close(void);
 int  audio_underruns(void);
-double audio_input_rate(void);                    /* current resampler input rate (tests) */                       /* times the queue ran empty while playing */
+double audio_input_rate(void);
+int  audio_playing(void);                          /* device running (after prefill) */                    /* current resampler input rate (tests) */                       /* times the queue ran empty while playing */

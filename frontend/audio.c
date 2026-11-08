@@ -10,7 +10,7 @@ static SDL_AudioDeviceID dev;
 static Resampler rs;
 static double core_rate, cur_rate;
 static int underruns;
-static bool paused, primed;
+static bool paused, primed, playing;   /* playing: device started after the prefill */
 static int16_t outbuf[8192 * 2];
 
 int audio_open(double rate) {
@@ -20,14 +20,14 @@ int audio_open(double rate) {
     if (!dev) return -1;
     core_rate = cur_rate = rate;
     rs = (Resampler){0};
-    SDL_PauseAudioDevice(dev, 0);
+    playing = false;            /* started in audio_push once TARGET is queued */
     return 0;
 }
 
 size_t audio_push(const int16_t *s, size_t frames) {
     if (!dev) return frames;
     Uint32 q = SDL_GetQueuedAudioSize(dev);
-    if (q == 0 && primed && !paused) {
+    if (q == 0 && playing && !paused) {
         underruns++;
         rg_log("audio underrun %d\n", underruns);
     }
@@ -37,6 +37,10 @@ size_t audio_push(const int16_t *s, size_t frames) {
     size_t n = resample(&rs, s, frames, cur_rate / OUT_RATE, outbuf, sizeof outbuf / 4);
     SDL_QueueAudio(dev, outbuf, (Uint32)(n * 4));
     primed = true;
+    if (!playing && !paused && SDL_GetQueuedAudioSize(dev) >= TARGET) {
+        SDL_PauseAudioDevice(dev, 0);
+        playing = true;
+    }
     return frames;
 }
 
@@ -47,15 +51,18 @@ void audio_wait(void) {
 
 void audio_pause(bool on) {
     if (!dev) return;
-    SDL_PauseAudioDevice(dev, on);
     paused = on;
+    /* pause now; un-pausing waits for the prefill in audio_push */
+    SDL_PauseAudioDevice(dev, 1);
+    playing = false;
     if (on) { SDL_ClearQueuedAudio(dev); primed = false; }
 }
 
 void audio_close(void) {
     if (dev) SDL_CloseAudioDevice(dev);
-    dev = 0; primed = false;
+    dev = 0; primed = playing = false;
 }
 
 int audio_underruns(void) { return underruns; }
 double audio_input_rate(void) { return cur_rate; }
+int audio_playing(void) { return playing; }
