@@ -251,7 +251,7 @@ static void draw(const char *status) {
         draw_header(settings_title(), settings_sel(), settings_count());
         settings_draw(&ui, LIST_Y, ROWS);
         if (!status) status = settings_status();
-        a = settings_hint_a();
+        if (!status) { settings_hints(&ui); SDL_RenderPresent(ui.ren); return; }
     } else {
         Entry *list = level ? games : root;
         int n = level ? ngames : nroot;
@@ -437,7 +437,9 @@ int main(void) {
             int press_a = btn == SDL_CONTROLLER_BUTTON_B, press_b = btn == SDL_CONTROLLER_BUTTON_A;
             int nav = btn == SDL_CONTROLLER_BUTTON_DPAD_UP ? NAV_UP : btn == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? NAV_DOWN
                     : btn == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? NAV_LEFT : btn == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? NAV_RIGHT
-                    : press_a ? NAV_A : press_b ? NAV_B : -1;
+                    : press_a ? NAV_A : press_b ? NAV_B : btn == SDL_CONTROLLER_BUTTON_X ? NAV_X
+                    : btn == SDL_CONTROLLER_BUTTON_Y ? NAV_Y : btn == SDL_CONTROLLER_BUTTON_START ? NAV_START
+                    : btn == SDL_CONTROLLER_BUTTON_BACK ? NAV_SELECT : -1;
             if (in_settings) {
                 if (nav >= 0 && settings_key(nav)) {
                     in_settings = 0; level = 0; build_root();
@@ -472,6 +474,7 @@ int main(void) {
                 held = btn; held_since = last_rep = SDL_GetTicks();
             }
         }
+        if (in_settings && settings_poll()) dirty = 1;
         Uint32 now = SDL_GetTicks();
         if (held && now - held_since > 350 && now - last_rep > (in_settings ? 120 : 70)) {
             if (in_settings)

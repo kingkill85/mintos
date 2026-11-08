@@ -1,0 +1,170 @@
+#!/usr/bin/python3
+"""Wi-Fi for the MintOS settings, over iwd's D-Bus API (busctl).
+  mintos-wifi status            powered=0|1, state=..., ssid=...
+  mintos-wifi list [--cached]   scan (unless --cached), then "name<TAB>type<TAB>bars 0-4<TAB>known<TAB>connected" per network
+  mintos-wifi connect <ssid>    passphrase (if needed) on stdin; exit 0 when connected
+  mintos-wifi forget <ssid>
+  mintos-wifi power on|off
+A new network's passphrase goes into /var/lib/iwd/<name>.psk (iwd picks it up), so no agent is needed."""
+import json, os, re, subprocess, sys, time
+
+SVC = "net.connman.iwd"
+IWD_DIR = "/var/lib/iwd"
+
+
+def busctl(*args, timeout=10):
+    r = subprocess.run(["busctl", "--json=short", f"--timeout={timeout}", *args], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(r.stderr.strip() or "busctl failed")
+    return json.loads(r.stdout) if r.stdout.strip() else None
+
+
+def objects():
+    return busctl("call", SVC, "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects")["data"][0]
+
+
+def parse(objs):
+    """device path, power, state, connected ssid and the networks from GetManagedObjects"""
+    val = lambda props, k, d=None: props.get(k, {}).get("data", d)
+    st = {"device": None, "powered": False, "state": "", "ssid": "", "networks": [], "known": {}}
+    for path, ifs in objs.items():
+        if "net.connman.iwd.KnownNetwork" in ifs:
+            st["known"][val(ifs["net.connman.iwd.KnownNetwork"], "Name")] = path
+    for path, ifs in sorted(objs.items()):
+        if "net.connman.iwd.Device" in ifs and st["device"] is None:
+            st["device"] = path
+            st["powered"] = bool(val(ifs["net.connman.iwd.Device"], "Powered", False))
+            if "net.connman.iwd.Station" in ifs:
+                st["state"] = val(ifs["net.connman.iwd.Station"], "State", "")
+        if "net.connman.iwd.Network" in ifs:
+            n = ifs["net.connman.iwd.Network"]
+            net = {"path": path, "name": val(n, "Name", ""), "type": val(n, "Type", ""),
+                   "known": "KnownNetwork" in n, "connected": bool(val(n, "Connected", False)), "signal": -10000}
+            st["networks"].append(net)
+            if net["connected"]:
+                st["ssid"] = net["name"]
+    return st
+
+
+def bars(signal):
+    dbm = signal / 100
+    return 4 if dbm >= -60 else 3 if dbm >= -70 else 2 if dbm >= -78 else 1 if dbm >= -88 else 0
+
+
+def iwd_file(name, typ):
+    plain = re.fullmatch(r"[A-Za-z0-9 _-]+", name) is not None
+    return (name if plain else "=" + name.encode().hex()) + "." + typ
+
+
+def write_psk(d, name, passphrase):
+    p = os.path.join(d, iwd_file(name, "psk"))
+    fd = os.open(p + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write("[Security]\nPassphrase=%s\n" % passphrase)
+    os.rename(p + ".tmp", p)
+    return p
+
+
+def state():
+    return parse(objects())
+
+
+def scan(st):
+    try:
+        busctl("call", SVC, st["device"], "net.connman.iwd.Station", "Scan")
+    except RuntimeError:
+        pass  # already scanning, or busy connecting
+    for _ in range(40):
+        time.sleep(0.25)
+        r = busctl("get-property", SVC, st["device"], "net.connman.iwd.Station", "Scanning")
+        if not r["data"]:
+            break
+
+
+def cmd_list(cached=False):
+    st = state()
+    if not st["device"] or not st["powered"]:
+        return 1
+    if not cached:
+        scan(st)
+        st = state()
+    sig = {}
+    for path, s in busctl("call", SVC, st["device"], "net.connman.iwd.Station", "GetOrderedNetworks")["data"][0]:
+        sig[path] = s
+    nets = sorted(st["networks"], key=lambda n: (not n["connected"], not n["known"], -sig.get(n["path"], -10000)))
+    for n in nets:
+        print("\t".join([n["name"].replace("\t", " "), n["type"], str(bars(sig.get(n["path"], -10000))),
+                         str(int(n["known"])), str(int(n["connected"]))]))
+    return 0
+
+
+def find(st, name):
+    return next((n for n in st["networks"] if n["name"] == name), None)
+
+
+def cmd_connect(name):
+    st = state()
+    n = find(st, name)
+    if not n:
+        print("Netz nicht gefunden"); return 1
+    created = None
+    if n["type"] == "psk" and not n["known"]:
+        pw = sys.stdin.readline().rstrip("\n")
+        if len(pw) < 8:
+            print("Passwort zu kurz"); return 1
+        created = write_psk(IWD_DIR, name, pw)
+        time.sleep(1)   # iwd notices the new file
+    try:
+        busctl("call", SVC, n["path"], "net.connman.iwd.Network", "Connect", timeout=30)
+    except RuntimeError as e:
+        if created:
+            try:
+                busctl("call", SVC, state()["known"].get(name, ""), "net.connman.iwd.KnownNetwork", "Forget")
+            except RuntimeError:
+                pass
+            if os.path.exists(created):
+                os.unlink(created)
+        print("Falsches Passwort" if "Failed" in str(e) or "Aborted" in str(e) else "Verbindung fehlgeschlagen")
+        return 1
+    return 0
+
+
+def cmd_forget(name):
+    path = state()["known"].get(name)
+    if not path:
+        return 1
+    busctl("call", SVC, path, "net.connman.iwd.KnownNetwork", "Forget")
+    return 0
+
+
+def cmd_power(on):
+    st = state()
+    if not st["device"]:
+        return 1
+    busctl("set-property", SVC, st["device"], "net.connman.iwd.Device", "Powered", "b", "true" if on else "false")
+    return 0
+
+
+def main(argv):
+    try:
+        if argv[:1] == ["status"]:
+            st = state()
+            print("powered=%d\nstate=%s\nssid=%s" % (st["powered"], st["state"], st["ssid"]))
+            return 0
+        if argv[:1] == ["list"]:
+            return cmd_list(cached="--cached" in argv)
+        if argv[:1] == ["connect"] and len(argv) == 2:
+            return cmd_connect(argv[1])
+        if argv[:1] == ["forget"] and len(argv) == 2:
+            return cmd_forget(argv[1])
+        if argv[:1] == ["power"] and len(argv) == 2:
+            return cmd_power(argv[1] == "on")
+    except (RuntimeError, KeyError, IndexError, TypeError, ValueError) as e:
+        print("Fehler: %s" % e)
+        return 1
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

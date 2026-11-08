@@ -23,7 +23,7 @@ CC="zig cc -target aarch64-linux-gnu.2.38 -O2 -Wall -DMINTOS_VERSION=\\\"$VER\\\
 nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev pkg-config --run "
   set -e
   CF=\$(pkg-config --cflags sdl2 SDL2_ttf SDL2_image zlib)
-  $CC \$CF -Icommon -Ifrontend launcher/rglauncher.c launcher/settings.c common/ui.c common/settings.c frontend/config.c frontend/gameopts.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -Wl,--allow-shlib-undefined
+  $CC \$CF -Icommon -Ifrontend launcher/rglauncher.c launcher/settings.c launcher/job.c launcher/keyboard.c common/ui.c common/settings.c frontend/config.c frontend/gameopts.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -Wl,--allow-shlib-undefined
   echo 'built build/rglauncher'
   $CC \$CF -Ifrontend -Icommon \$(ls frontend/*.c common/*.c 2>/dev/null) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -lz -ldl -lm -Wl,--allow-shlib-undefined
   echo 'built build/rgarch'

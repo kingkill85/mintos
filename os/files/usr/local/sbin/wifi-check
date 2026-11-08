@@ -5,6 +5,14 @@
 #  - rtw88 firmware upload errors (-84/-110) when it loads early -> reload rtw88.
 HOST=fe000000.mmc
 DRV=/sys/bus/platform/drivers/dwmmc_rockchip
+# switched off in the settings (settings.cfg "wifi = off"): keep it off
+if grep -qE '^wifi *= *off' /storage/.config/mintos/settings.cfg 2>/dev/null; then
+  for i in $(seq 1 30); do
+    /usr/local/sbin/mintos-wifi power off >/dev/null 2>&1 && { echo "wifi off (settings)"; exit 0; }
+    sleep 1
+  done
+  exit 0
+fi
 connected() { iwctl station wlan0 show 2>/dev/null | grep -qE 'State +connected'; }
 wait_connected() { for i in $(seq 1 "$1"); do connected && return 0; sleep 2; done; return 1; }
 wait_connected 15 && { echo "wifi connected"; exit 0; }
