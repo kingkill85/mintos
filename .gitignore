@@ -15,3 +15,4 @@ build/
 *.7z
 fonts
 !docs/**/*.md
+.superpowers/
