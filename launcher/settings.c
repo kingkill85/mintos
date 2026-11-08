@@ -357,6 +357,7 @@ void settings_hints(Ui *ui) {
     case I_DEV: a = devs[it->arg].connected ? "TRENNEN" : "VERBINDEN"; break;
     case I_TEXT: a = page == P_BT && bt_scanned ? "SUCHEN" : NULL; break;
     case I_REBOOT: case I_POWEROFF: a = "OK"; break;
+    case I_WIFI_POWER: case I_BT_POWER: a = "UMSCHALTEN"; break;
     case I_NET: a = nets[it->arg].connected ? NULL : "VERBINDEN"; break;
     default: break;
     }
