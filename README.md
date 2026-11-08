@@ -1,6 +1,6 @@
-# rg353v
+# MintOS (RG353V)
 
-An own minimal OS for the Anbernic RG353V: Debian 13 (trixie, arm64), a self-built
+**MintOS**, an own minimal OS for the Anbernic RG353V: Debian 13 (trixie, arm64), a self-built
 kernel, RetroArch/ScummVM and a plain game list (`rglauncher`). No desktop, no
 compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
 

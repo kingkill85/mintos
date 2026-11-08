@@ -1,5 +1,5 @@
 [Unit]
-Description=Detach the text console from the panel (no text between list and game)
+Description=Detach the text console from the panel and show the boot logo
 DefaultDependencies=no
 After=systemd-modules-load.service
 Before=rglauncher.service sysinit.target
@@ -9,8 +9,10 @@ Type=oneshot
 RemainAfterExit=yes
 # vtcon "frame buffer device" draws boot/console text on the panel whenever no program
 # holds the display (e.g. while the list hands over to a game); unbind it and blank the
-# console framebuffer, which otherwise keeps the last text (kernel messages) on the panel
-ExecStart=/bin/sh -c 'for v in /sys/class/vtconsole/vtcon*; do grep -q "frame buffer" "$v/name" && echo 0 > "$v/bind"; done; cat /dev/zero > /dev/fb0 2>/dev/null; true'
+# console framebuffer, which otherwise keeps the last text (kernel messages) on the panel.
+# Instead it shows the boot logo (os/splash/make-splash.sh) until the list takes over;
+# rglauncher.service blanks it then, so it does not flash between list and game.
+ExecStart=/bin/sh -c 'for v in /sys/class/vtconsole/vtcon*; do grep -q "frame buffer" "$v/name" && echo 0 > "$v/bind"; done; cat /usr/local/share/rg353/splash.raw > /dev/fb0 2>/dev/null || cat /dev/zero > /dev/fb0 2>/dev/null; true'
 
 [Install]
 WantedBy=sysinit.target

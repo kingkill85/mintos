@@ -8,5 +8,5 @@ scp -q build/rglauncher "$HOST:/storage/.config/rglauncher/rglauncher.new"
 scp -q build/rgarch "$HOST:/usr/local/bin/rgarch.new" && ssh "$HOST" 'mv /usr/local/bin/rgarch.new /usr/local/bin/rgarch'
 tar -C os/files --owner=0 --group=0 -cf - storage etc usr | ssh "$HOST" 'tar -C / -xf - && systemctl daemon-reload'
 ssh "$HOST" 'mv /storage/.config/rglauncher/rglauncher.new /storage/.config/rglauncher/rglauncher && sync
-  if pgrep -x retroarch >/dev/null || pgrep -x scummvm >/dev/null; then echo "game running: launcher updates when it exits"
+  if pgrep -x rgarch >/dev/null || pgrep -x retroarch >/dev/null; then echo "game running: launcher updates when it exits"
   else systemctl restart rglauncher && echo deployed; fi'

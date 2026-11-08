@@ -12,6 +12,8 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
 StandardError=journal
+# the boot logo stays in the console framebuffer; blank it once the list is up
+ExecStartPost=/bin/sh -c 'sleep 2; cat /dev/zero > /dev/fb0 2>/dev/null; true'
 Restart=always
 RestartSec=0
 
