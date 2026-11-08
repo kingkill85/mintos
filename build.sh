@@ -19,7 +19,7 @@ CC="zig cc -target aarch64-linux-gnu.2.38 -O2 -Wall"
 nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image pkg-config --run "
   set -e
   CF=\$(pkg-config --cflags sdl2 SDL2_ttf SDL2_image)
-  $CC \$CF launcher/rglauncher.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -Wl,--allow-shlib-undefined
+  $CC \$CF -Icommon launcher/rglauncher.c common/ui.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -Wl,--allow-shlib-undefined
   echo 'built build/rglauncher'
   $CC \$CF -Ifrontend -Icommon \$(ls frontend/*.c common/*.c 2>/dev/null) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -ldl -lm -Wl,--allow-shlib-undefined
   echo 'built build/rgarch'
