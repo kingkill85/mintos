@@ -16,7 +16,8 @@
 
 #define ROMS "/storage/roms"
 #define CONF "/storage/.config/rglauncher"
-#define FONT CONF "/fonts/VarelaRound-Regular.ttf"
+#define FONT CONF "/fonts/BPreplayBold-unhinted.otf"   /* MinUI's font */
+#define FONT2 CONF "/fonts/VarelaRound-Regular.ttf"
 #define FALLBACK_FONT "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"
 #define PSU "/sys/class/power_supply"
 #define MAXE 2048
@@ -116,7 +117,8 @@ static int scan_dir(const char *dir, int sys, int depth, Entry *out, int n, int 
         struct stat st;
         if (stat(p, &st)) continue;
         if (S_ISDIR(st.st_mode)) {
-            if (depth < 2 && strcasecmp(de->d_name, "images") && strcasecmp(de->d_name, "videos")
+            /* ScummVM game folders hold data plus the core's <id>.scummvm: list only the top */
+            if (depth < 2 && strcmp(SYSTEMS[sys].dir, "scummvm") && strcasecmp(de->d_name, "images") && strcasecmp(de->d_name, "videos")
                 && strcasecmp(de->d_name, "manuals"))
                 n = scan_dir(p, sys, depth + 1, out, n, max);
         } else if (has_ext(de->d_name, SYSTEMS[sys].exts)) {
@@ -201,24 +203,23 @@ static void build_root(void) {
             snprintf(root[nroot].label, sizeof root[nroot].label, "%s", SYSTEMS[s].name);
             nroot++;
         }
-    root[nroot].kind = K_POWEROFF; root[nroot].sys = -1;
-    snprintf(root[nroot].label, sizeof root[nroot].label, "Ausschalten");
-    nroot++;
 }
 
 /* ---------- drawing ---------- */
 static SDL_Window *win;
 static SDL_Renderer *ren;
-static TTF_Font *big, *small;
+static TTF_Font *big, *small, *btn;
 static int W = 640, H = 480;
 
+/* MinUI geometry at 640x480 (its 2x scale): padding 20, pill 60, button 44 */
 #define PAD 20
 #define PILL 60
-#define HINT 44
+#define HINT 60
+#define BTN 44
 
 static const SDL_Color WHITE = {255, 255, 255, 255}, BLACK = {0, 0, 0, 255},
                        GRAY = {0x99, 0x99, 0x99, 255}, DARK = {0x26, 0x26, 0x26, 255},
-                       LIGHT = {0xcc, 0xcc, 0xcc, 255};
+                       LIGHT = {0xcc, 0xcc, 0xcc, 255}, MID = {0x80, 0x80, 0x80, 255};
 
 static void set(SDL_Color c) { SDL_SetRenderDrawColor(ren, c.r, c.g, c.b, 255); }
 
@@ -301,14 +302,12 @@ static void battery(void) {
     FILE *f = fopen(stp, "r");
     if (f) { if (!fgets(st, sizeof st, f)) st[0] = 0; fclose(f); }
     int charging = !strncmp(st, "Charging", 8);
-    int bw = 36, bh = 18, x = W - PAD - 16 - bw - 4, y = PAD + (HINT - bh) / 2;
-    pill(W - PAD - 72, PAD, 72, HINT, DARK);
+    int cx = W - PAD - PILL, cy = PAD;
+    pill(cx, cy, PILL, PILL, DARK);                       /* circle */
+    int bw = 30, bh = 16, x = cx + (PILL - bw - 3) / 2, y = cy + (PILL - bh) / 2;
     set(WHITE);
-    SDL_Rect body = {x, y, bw, bh};
-    SDL_RenderDrawRect(ren, &body);
-    SDL_Rect inner = {x + 1, y + 1, bw - 2, bh - 2};
-    SDL_RenderDrawRect(ren, &inner);
-    SDL_Rect nub = {x + bw, y + 5, 3, bh - 10};
+    for (int i = 0; i < 2; i++) { SDL_Rect r = {x + i, y + i, bw - 2 * i, bh - 2 * i}; SDL_RenderDrawRect(ren, &r); }
+    SDL_Rect nub = {x + bw, y + 4, 3, bh - 8};
     SDL_RenderFillRect(ren, &nub);
     int fillw = (bw - 8) * (pct > 100 ? 100 : pct) / 100;
     SDL_Color c = pct <= 10 && !charging ? (SDL_Color){0xff, 0x30, 0x30, 255} : WHITE;
@@ -317,15 +316,29 @@ static void battery(void) {
     SDL_RenderFillRect(ren, &lvl);
 }
 
-/* MinUI-style hint: dark pill with a light round button and a word */
-static int hint(int right, const char *button, const char *label) {
-    int bd = HINT - 12, lw = text_w(small, label), w = 6 + bd + 10 + lw + 16;
-    int x = right - w, y = H - PAD - HINT;
+/* MinUI hint group: one dark pill holding "[button] WORD" pairs. A button is a light
+ * circle with a dark letter, or (long names like POWER) a light pill with gray text.
+ * Returns the group's width; drawn right-aligned at `right` or left-aligned at `left`. */
+static int hint_group(int left, int right, const char *pairs[][2], int n) {
+    int w = 8, bws[4], lws[4];
+    for (int i = 0; i < n; i++) {
+        int tw = text_w(pairs[i][0][1] ? small : btn, pairs[i][0]);
+        bws[i] = pairs[i][0][1] ? tw + 24 : BTN;
+        lws[i] = text_w(small, pairs[i][1]);
+        w += bws[i] + 10 + lws[i] + 14;
+    }
+    int x = right ? right - w : left, y = H - PAD - HINT, cy = y + HINT / 2;
     pill(x, y, w, HINT, DARK);
-    pill(x + 6, y + 6, bd, bd, LIGHT);
-    int bw = text_w(small, button);
-    text(small, button, x + 6 + (bd - bw) / 2, y + HINT / 2, DARK, bd);
-    text(small, label, x + 6 + bd + 10, y + HINT / 2, WHITE, lw);
+    int cx = x + 8;
+    for (int i = 0; i < n; i++) {
+        const char *b = pairs[i][0];
+        pill(cx, cy - BTN / 2, bws[i], BTN, LIGHT);
+        TTF_Font *f = b[1] ? small : btn;
+        text(f, b, cx + (bws[i] - text_w(f, b)) / 2, cy, b[1] ? MID : DARK, bws[i]);
+        cx += bws[i] + 10;
+        text(small, pairs[i][1], cx, cy, WHITE, lws[i]);
+        cx += lws[i] + 14;
+    }
     return w;
 }
 
@@ -338,36 +351,37 @@ static void draw(const char *status) {
     set(BLACK);
     SDL_RenderClear(ren);
     battery();
-    if (level == 1) text(small, title, PAD + 4, PAD + HINT / 2, GRAY, W - 2 * PAD - 100);
 
     Entry *list = level ? games : root;
     int n = level ? ngames : nroot;
-    int y0 = PAD + HINT + 8, rows = (H - y0 - PAD - HINT - 8) / PILL;
+    int y0 = PAD, rows = (H - y0 - PAD - HINT) / PILL;
     if (sel < top) top = sel;
     if (sel >= top + rows) top = sel - rows + 1;
-    if (n == 0) text(big, "Keine Spiele", PAD + 20, y0 + PILL / 2, GRAY, W);
+    if (n == 0) text(big, "Keine Spiele", PAD + 24, y0 + PILL / 2, GRAY, W);
     for (int r = 0; r < rows && top + r < n; r++) {
         int i = top + r, y = y0 + r * PILL;
+        int maxw = W - 2 * PAD - 48 - (r == 0 ? PILL + 10 : 0);  /* first row leaves room for the battery */
         Entry *e = &list[i];
-        SDL_Color fg = e->kind == K_POWEROFF ? GRAY : WHITE;
+        SDL_Color fg = WHITE;
         if (i == sel) {
             int tw = text_w(big, e->label);
-            int pw = tw + 2 * PAD + 4;
-            if (pw > W - 2 * PAD) pw = W - 2 * PAD;
-            pill(PAD, y, pw, PILL, WHITE);
+            pill(PAD, y, (tw < maxw ? tw : maxw) + 48, PILL, WHITE);
             fg = BLACK;
         }
-        text(big, e->label, PAD + PAD, y + PILL / 2, fg, W - 4 * PAD);
+        text(big, e->label, PAD + 24, y + PILL / 2, fg, maxw);
     }
 
-    int right = W - PAD;
     if (status) {
         text(small, status, PAD + 4, H - PAD - HINT / 2, WHITE, W - 2 * PAD);
     } else {
+        const char *power[][2] = {{"POWER", "AUS"}};
+        hint_group(PAD, 0, power, 1);
         Entry *e = n ? &list[sel] : NULL;
-        const char *a = !e ? NULL : e->kind == K_GAME ? "STARTEN" : e->kind == K_POWEROFF ? "AUS" : "ÖFFNEN";
-        if (a) right -= hint(right, "A", a) + 10;
-        if (level) hint(right, "B", "ZURÜCK");
+        const char *a = !e ? NULL : e->kind == K_GAME ? "STARTEN" : "ÖFFNEN";
+        const char *both[][2] = {{"B", "ZURÜCK"}, {"A", a ? a : ""}};
+        if (level && a) hint_group(0, W - PAD, both, 2);
+        else if (level) hint_group(0, W - PAD, both, 1);
+        else if (a) hint_group(0, W - PAD, both + 1, 1);
     }
     SDL_RenderPresent(ren);
 }
@@ -386,6 +400,7 @@ static int open_video(void) {
 }
 
 static void close_video(void) {
+    if (!win) return;
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
     SDL_Quit();
@@ -394,15 +409,22 @@ static void close_video(void) {
 
 static int fonts(void) {
     if (TTF_Init() < 0) return -1;
-    big = TTF_OpenFont(FONT, 30);
-    small = TTF_OpenFont(FONT, 20);
+    /* MinUI at 640x480: large 32, small 24, buttons 28 */
+    big = TTF_OpenFont(FONT, 32);
+    small = TTF_OpenFont(FONT, 24);
+    btn = TTF_OpenFont(FONT, 28);
+    int bold = 0;
+    if (!big || !small || !btn) {
+        big = TTF_OpenFont(FONT2, 30); small = TTF_OpenFont(FONT2, 22); btn = TTF_OpenFont(FONT2, 26);
+        bold = 1;
+    }
     if (!big || !small) {
         big = TTF_OpenFont(FALLBACK_FONT, 28);
         small = TTF_OpenFont(FALLBACK_FONT, 18);
     }
     if (!big || !small) return -1;
-    TTF_SetFontStyle(big, TTF_STYLE_BOLD);
-    TTF_SetFontStyle(small, TTF_STYLE_BOLD);
+    if (!btn) btn = small;
+    if (bold) { TTF_SetFontStyle(big, TTF_STYLE_BOLD); TTF_SetFontStyle(small, TTF_STYLE_BOLD); TTF_SetFontStyle(btn, TTF_STYLE_BOLD); }
     return 0;
 }
 
@@ -442,7 +464,7 @@ static void open_entry(int i) {
 static void launch(Entry *g) {
     add_recent(g);
     if (level && root[root_sel].kind == K_RECENT) sel = 0;  /* the game is now first in the list */
-    save_state();
+    if (win) save_state();  /* not on resume at boot: the list was never loaded */
     close_video();
     int fd = open("/var/log/rglauncher-game.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
@@ -456,8 +478,34 @@ static void move(int d, int n) {
     sel = (sel + d + n) % n;
 }
 
+/* Garlic-style resume: rg353-power wrote CONF/resume ("<system>\t<rom>") when the power key
+ * switched the device off during a game. Start that game again; RESUME=1 makes launch.sh
+ * load RetroArch's auto save state. The file is removed first so a crash cannot loop. */
+static void resume_game(void) {
+    char line[700], *tab;
+    FILE *f = fopen(CONF "/resume", "r");
+    if (!f) return;
+    int ok = fgets(line, sizeof line, f) != NULL;
+    fclose(f);
+    unlink(CONF "/resume");
+    if (!ok || !(tab = strchr(line, '\t'))) return;
+    *tab = 0;
+    line[strcspn(tab + 1, "\n") + (tab + 1 - line)] = 0;
+    for (int s = 0; s < NSYS; s++) {
+        if (strcmp(SYSTEMS[s].dir, line)) continue;
+        Entry e = {.kind = K_GAME, .sys = s};
+        snprintf(e.path, sizeof e.path, "%s", tab + 1);
+        snprintf(e.label, sizeof e.label, "%s", tab + 1);
+        if (access(e.path, R_OK)) return;
+        setenv("RESUME", "1", 1);
+        launch(&e);
+    }
+}
+
 int main(void) {
     mkdir(CONF, 0755);
+    /* before touching the display: opening and at once closing KMS left the panel black */
+    resume_game();
     if (fonts() < 0 || open_video() < 0) { fprintf(stderr, "init: %s\n", SDL_GetError()); return 1; }
     build_root();
     load_state();

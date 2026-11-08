@@ -17,7 +17,7 @@ export ARCH=arm64 CROSS_COMPILE=aarch64-unknown-linux-gnu-
 scripts/kconfig/merge_config.sh -m .config $HERE/kernel-min.fragment >/dev/null
 scripts/config --set-str LOCALVERSION $VER
 make olddefconfig >/dev/null
-for k in TOUCHSCREEN_HYNITRON_CSTXXX DRM_PANEL_SITRONIX_ST7703 DRM_PANEL_NEWVISION_NV3051D JOYSTICK_ADC INPUT_PWM_VIBRA DRM_PANFROST SND_SOC_RK817 MMC_DW_ROCKCHIP EXT4_FS REGULATOR_RK808 I2C_RK3X GPIO_ROCKCHIP ROCKCHIP_IODOMAIN USB_F_NCM; do grep -qE \"^CONFIG_\$k=y\" .config || { echo \"not built in: \$k\"; exit 1; }; done
+for k in IIO_MUX MUX_GPIO TOUCHSCREEN_HYNITRON_CSTXXX DRM_PANEL_SITRONIX_ST7703 DRM_PANEL_NEWVISION_NV3051D JOYSTICK_ADC INPUT_PWM_VIBRA DRM_PANFROST SND_SOC_RK817 MMC_DW_ROCKCHIP EXT4_FS REGULATOR_RK808 I2C_RK3X GPIO_ROCKCHIP ROCKCHIP_IODOMAIN USB_F_NCM; do grep -qE \"^CONFIG_\$k=y\" .config || { echo \"not built in: \$k\"; exit 1; }; done
 grep -qE '^CONFIG_RTW88_8821CS=m' .config || { echo 'rtw88 not a module'; exit 1; }
 echo modules: \$(grep -c '=m\$' .config) builtin: \$(grep -c '=y\$' .config)
 make -j\$(nproc) Image modules

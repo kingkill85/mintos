@@ -2,7 +2,7 @@
 """Merge the RG353V's button devices into one virtual gamepad "RG353V Gamepad".
 
 The kernel splits the controls: gpio-keys-control (A/B/X/Y, D-pad, shoulders, Start,
-Select, sticks' clicks) and adc-keys (the F key, BTN_MODE). RetroArch only combines
+Select, sticks' clicks), adc-keys (the F key, BTN_MODE) and adc-joystick (both sticks). RetroArch only combines
 buttons of a single device, so F could not be the hotkey. Both are grabbed here and
 re-emitted from one uinput device.
 """
@@ -10,7 +10,7 @@ import asyncio
 import evdev
 from evdev import ecodes as e
 
-SOURCES = ("gpio-keys-control", "adc-keys")
+SOURCES = ("gpio-keys-control", "adc-keys", "adc-joystick")
 
 
 def find():
@@ -22,9 +22,15 @@ def find():
     return devs
 
 
-async def forward(src, out):
+# adc-joystick reports up as +; gamepads (SDL, RetroArch) expect up = - : mirror the Y axes
+FLIP = (e.ABS_Y, e.ABS_RY)
+
+
+async def forward(src, out, flip):
     async for ev in src.async_read_loop():
-        if ev.type in (e.EV_KEY, e.EV_ABS):
+        if ev.type == e.EV_ABS and ev.code in flip:
+            out.write(ev.type, ev.code, flip[ev.code] - ev.value)
+        elif ev.type in (e.EV_KEY, e.EV_ABS):
             out.write(ev.type, ev.code, ev.value)
         elif ev.type == e.EV_SYN:
             out.syn()
@@ -33,10 +39,15 @@ async def forward(src, out):
 async def main():
     devs = find()
     keys = sorted({c for d in devs.values() for c in d.capabilities().get(e.EV_KEY, [])})
-    out = evdev.UInput({e.EV_KEY: keys}, name="RG353V Gamepad", vendor=0x2207, product=0x0353, version=1)
+    caps = {e.EV_KEY: keys}
+    axes = [a for d in devs.values() for a in d.capabilities(absinfo=True).get(e.EV_ABS, [])]
+    if axes:
+        caps[e.EV_ABS] = axes
+    out = evdev.UInput(caps, name="RG353V Gamepad", vendor=0x2207, product=0x0353, version=1)
     for d in devs.values():
         d.grab()
-    await asyncio.gather(*(forward(d, out) for d in devs.values()))
+    flip = {c: a.min + a.max for d in devs.values() for c, a in d.capabilities(absinfo=True).get(e.EV_ABS, []) if c in FLIP}
+    await asyncio.gather(*(forward(d, out, flip) for d in devs.values()))
 
 
 if __name__ == "__main__":

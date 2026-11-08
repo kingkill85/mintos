@@ -68,3 +68,7 @@ CONFIG_MPTCP=n
 CONFIG_IO_URING=n
 CONFIG_IPV6=n
 CONFIG_AUDIT=n
+# analog sticks: adc-joystick reads 4 axes through an ADC multiplexer (missing in Debian's config)
+CONFIG_MULTIPLEXER=y
+CONFIG_MUX_GPIO=y
+CONFIG_IIO_MUX=y

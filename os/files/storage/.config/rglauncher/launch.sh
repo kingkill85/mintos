@@ -1,6 +1,8 @@
 #!/bin/bash
 # launch.sh <rom> <system>: start a game with RetroArch (or ScummVM) on the rg353v OS.
 ROM="$1"; SYS="$2"
+# for rg353-power: which game is running (resumed after the power key switched off)
+printf '%s\t%s\n' "$SYS" "$ROM" > /run/rglauncher-current
 CORES=/storage/.config/retroarch/cores   # libretro buildbot builds (Debian's are years old)
 CFG=/storage/.config/retroarch/retroarch.cfg
 case "$SYS" in
@@ -27,11 +29,18 @@ case "$SYS" in
   psp)                                       CORE=ppsspp ;;
   dreamcast)                                 CORE=flycast ;;
   scummvm)
-    echo "$(date +%T) scummvm $ROM"
-    # the .scummvm file holds the command line, e.g. --path="/storage/roms/scummvm/x" monkey
+    # The list holds ROCKNIX-style files: --path="<game dir>" <id>. RetroArch's ScummVM core
+    # wants <game dir>/<id>.scummvm containing the id; it starts the game without ScummVM's GUI.
     eval "set -- $(cat "$ROM")"
-    exec scummvm --fullscreen "$@" ;;
+    DIR=${1#--path=}; ID=$2
+    [ -f "$DIR/$ID.scummvm" ] || echo "$ID" > "$DIR/$ID.scummvm"
+    ROM="$DIR/$ID.scummvm"; CORE=scummvm
+    # Monkey Island 2: ScummVM accepts any answer to the code wheel; type one automatically
+    [ "$ID" = monkey2 ] && /usr/local/sbin/mi2-copyprotect >/dev/null 2>&1 &
+    ;;
   *) echo "no emulator for $SYS"; exit 1 ;;
 esac
-echo "$(date +%T) $SYS core=$CORE rom=$ROM"
-exec retroarch --verbose --config "$CFG" -L "$CORES/${CORE}_libretro.so" "$ROM"
+echo "$(date +%T) $SYS core=$CORE rom=$ROM resume=${RESUME:-0}"
+# RESUME=1 (set by rglauncher after a power-off in game): load the auto save state
+EXTRA=; [ "$RESUME" = 1 ] && EXTRA="--appendconfig /storage/.config/retroarch/resume.cfg"
+exec retroarch --verbose --config "$CFG" $EXTRA -L "$CORES/${CORE}_libretro.so" "$ROM"

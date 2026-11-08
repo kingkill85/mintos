@@ -10,9 +10,9 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
   `/storage/roms/<system>`; D-pad moves, L/R or left/right page, **A** starts, **B** goes back.
   Starting a game replaces the process with `launch.sh`; systemd restarts the list afterwards.
 - Kernels (Linux 6.12.116, cross-built with `os/build-kernel*.sh`):
-  - `Image-min2` (default, 20 MB): `MINVER=-rg353v-min2 os/build-kernel-min.sh` — localyesconfig
+  - `Image-min3` (default, 20 MB): `MINVER=-rg353v-min3 os/build-kernel-min.sh` — localyesconfig
     from the device's modules, only Rockchip, no initramfs, no tracing/BPF/IPv6/netfilter/video
-    decoders, plus the CST340 touchscreen; 22 modules (Wi-Fi/Bluetooth, whose firmware is on
+    decoders, plus the CST340 touchscreen and the stick ADC multiplexer; 22 modules (Wi-Fi/Bluetooth, whose firmware is on
     the rootfs). System ready about 9 s after the kernel starts. `Image-min` is the previous one.
   - `Image` + `initrd.img` (fallback): `os/build-kernel.sh` — Debian's arm64 config plus the
     RG353V drivers it lacks (NV3051D panel, adc-joystick, pwm-vibra).
@@ -23,6 +23,9 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
     uinput gamepad "RG353V Gamepad", so F can be RetroArch's hotkey.
   - `wifi-check`: gets the RTL8821CS up after boot (re-probes the SDIO controller if the card
     was not detected, reloads rtw88 after firmware upload errors) until iwd connects.
+  - `rg353-power`: power key like Garlic OS. During a game it remembers the game, lets
+    RetroArch write its auto save state and powers off; on the next boot rglauncher starts
+    that game again and loads the state. Outside games it just powers off.
   - `rg353-audio`: speaker/headphone switching (mainline leaves it on headphones) and the
     volume buttons.
   - `usb-net`: USB NCM gadget, the device is `10.55.0.2` (PC side `10.55.0.1/24`), SSH works without Wi-Fi.

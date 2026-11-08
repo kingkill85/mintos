@@ -34,10 +34,13 @@ curl -sL https://retrogamecorps.com/wp-content/uploads/2021/05/351v-overlays.zip
 unzip -q "$ST/ov.zip" -d "$ST/ov" && cp -a "$ST/ov/GB-GBC" "$ST/ov/GG" "$ST/ov/NGP" "$RA/overlays/"
 # current libretro cores + info files (Debian's Gambatte is from 2016, mGBA lacks colour options)
 mkdir -p "$RA/cores" "$RA/info"
-for c in gambatte mgba nestopia snes9x genesis_plus_gx picodrive fbneo mednafen_pce_fast mednafen_ngp mednafen_wswan handy stella2014 prosystem mednafen_vb pcsx_rearmed mupen64plus_next melondsds ppsspp flycast; do
+for c in gambatte mgba nestopia snes9x genesis_plus_gx picodrive fbneo mednafen_pce_fast mednafen_ngp mednafen_wswan handy stella2014 prosystem mednafen_vb pcsx_rearmed mupen64plus_next melondsds ppsspp flycast scummvm; do
   curl -sL "https://buildbot.libretro.com/nightly/linux/aarch64/latest/${c}_libretro.so.zip" -o "$ST/$c.zip"
   unzip -q -o "$ST/$c.zip" -d "$RA/cores"
 done
+# ScummVM core's engine data and themes -> system dir
+curl -sL https://buildbot.libretro.com/assets/system/ScummVM.zip -o "$ST/scummvm-sys.zip"
+mkdir -p "$ST/root/storage/roms/bios" && unzip -q -o "$ST/scummvm-sys.zip" -d "$ST/root/storage/roms/bios"
 curl -sL https://buildbot.libretro.com/assets/frontend/info.zip -o "$ST/info.zip" && unzip -q -o "$ST/info.zip" -d "$RA/info"
 # Retro Game Corps overlay pack (Jeltron/Perfect overlays, sharp-shimmerless), 2024 shader guide
 curl -sL https://github.com/retrogamecorps/RGC-Overlay-Pack/archive/refs/tags/v1.0.zip -o "$ST/rgc.zip"
@@ -61,7 +64,7 @@ depmod -a "$KV"
 echo "MODULES=most" > /etc/initramfs-tools/conf.d/rg353v
 update-initramfs -c -k "$KV" >/dev/null
 cp /boot/initrd.img-"$KV" /boot/initrd.img
-systemctl enable iwd systemd-resolved systemd-timesyncd ssh rglauncher usb-net wifi-check rg353-pad rg353-audio >/dev/null 2>&1
+systemctl enable iwd systemd-resolved systemd-timesyncd ssh rglauncher usb-net wifi-check rg353-pad rg353-audio rg353-power >/dev/null 2>&1
 systemctl mask getty@tty1 >/dev/null 2>&1
 passwd -l root >/dev/null
 rm -f /etc/apt/apt.conf.d/00rg353

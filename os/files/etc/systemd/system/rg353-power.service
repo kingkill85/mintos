@@ -1,0 +1,10 @@
+[Unit]
+Description=Power key: save the running game and power off (resumes on boot)
+
+[Service]
+ExecStart=/usr/local/sbin/rg353-power
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
