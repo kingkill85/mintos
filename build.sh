@@ -18,11 +18,12 @@ if [ ! -e "$SR/libSDL2_image.so" ]; then
   scp -q "$HOST:/usr/lib/aarch64-linux-gnu/libSDL2_image-2.0.so.0" "$SR/"
   ln -sf libSDL2_image-2.0.so.0 "$SR/libSDL2_image.so"
 fi
-CC="zig cc -target aarch64-linux-gnu.2.38 -O2 -Wall"
+VER=$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)
+CC="zig cc -target aarch64-linux-gnu.2.38 -O2 -Wall -DMINTOS_VERSION=\\\"$VER\\\""
 nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev pkg-config --run "
   set -e
   CF=\$(pkg-config --cflags sdl2 SDL2_ttf SDL2_image zlib)
-  $CC \$CF -Icommon launcher/rglauncher.c common/ui.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -Wl,--allow-shlib-undefined
+  $CC \$CF -Icommon launcher/rglauncher.c launcher/settings.c common/ui.c common/settings.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -Wl,--allow-shlib-undefined
   echo 'built build/rglauncher'
   $CC \$CF -Ifrontend -Icommon \$(ls frontend/*.c common/*.c 2>/dev/null) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -lz -ldl -lm -Wl,--allow-shlib-undefined
   echo 'built build/rgarch'

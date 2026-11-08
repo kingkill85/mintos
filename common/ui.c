@@ -7,17 +7,18 @@
 
 const SDL_Color UI_WHITE = {255, 255, 255, 255}, UI_BLACK = {0, 0, 0, 255},
                 UI_GRAY = {0x99, 0x99, 0x99, 255}, UI_DARK = {0x26, 0x26, 0x26, 255},
-                UI_LIGHT = {0xcc, 0xcc, 0xcc, 255}, UI_MID = {0x80, 0x80, 0x80, 255};
+                UI_LIGHT = {0xcc, 0xcc, 0xcc, 255}, UI_MID = {0x80, 0x80, 0x80, 255},
+                UI_BAR = {0x44, 0x44, 0x44, 255};
 
 int ui_fonts(Ui *ui, const char *font, const char *fallback) {
     if (TTF_Init() < 0) return -1;
     /* MinUI at 640x480: large 32, ui->small 24, buttons 28 */
     ui->big = TTF_OpenFont(font, 32);
     ui->small = TTF_OpenFont(font, 24);
-    ui->btn = TTF_OpenFont(font, 28);
+    ui->btn = TTF_OpenFont(font, 22);
     int bold = 0;
     if (!ui->big || !ui->small || !ui->btn) {
-        ui->big = TTF_OpenFont(fallback, 30); ui->small = TTF_OpenFont(fallback, 22); ui->btn = TTF_OpenFont(fallback, 26);
+        ui->big = TTF_OpenFont(fallback, 30); ui->small = TTF_OpenFont(fallback, 22); ui->btn = TTF_OpenFont(fallback, 20);
         bold = 1;
     }
     if (!ui->big || !ui->small) return -1;
@@ -107,9 +108,9 @@ void ui_battery(Ui *ui) {
     FILE *f = fopen(stp, "r");
     if (f) { if (!fgets(st, sizeof st, f)) st[0] = 0; fclose(f); }
     int charging = !strncmp(st, "Charging", 8);
-    int cx = ui->w - PAD - PILL, cy = PAD;
-    ui_pill(ui, cx, cy, PILL, PILL, UI_DARK);                       /* circle */
-    int bw = 30, bh = 16, x = cx + (PILL - bw - 3) / 2, y = cy + (PILL - bh) / 2;
+    int cx = ui->w - PAD - HINT, cy = PAD;
+    ui_pill(ui, cx, cy, HINT, HINT, UI_BAR);                        /* circle */
+    int bw = 26, bh = 14, x = cx + (HINT - bw - 3) / 2, y = cy + (HINT - bh) / 2;
     ui_set(ui, UI_WHITE);
     for (int i = 0; i < 2; i++) { SDL_Rect r = {x + i, y + i, bw - 2 * i, bh - 2 * i}; SDL_RenderDrawRect(ui->ren, &r); }
     SDL_Rect nub = {x + bw, y + 4, 3, bh - 8};
@@ -127,23 +128,31 @@ void ui_battery(Ui *ui) {
 int ui_hints(Ui *ui, int left, int right, const char *pairs[][2], int n) {
     int w = 8, bws[4], lws[4];
     for (int i = 0; i < n; i++) {
-        int tw = ui_text_w(pairs[i][0][1] ? ui->small : ui->btn, pairs[i][0]);
-        bws[i] = pairs[i][0][1] ? tw + 24 : BTN;
-        lws[i] = ui_text_w(ui->small, pairs[i][1]);
+        int tw = ui_text_w(ui->btn, pairs[i][0]);
+        bws[i] = pairs[i][0][1] ? tw + 20 : BTN;
+        lws[i] = ui_text_w(ui->btn, pairs[i][1]);
         w += bws[i] + 10 + lws[i] + 14;
     }
     int x = right ? right - w : left, y = ui->h - PAD - HINT, cy = y + HINT / 2;
-    ui_pill(ui, x, y, w, HINT, UI_DARK);
+    ui_pill(ui, x, y, w, HINT, UI_BAR);
     int cx = x + 8;
     for (int i = 0; i < n; i++) {
         const char *b = pairs[i][0];
         ui_pill(ui, cx, cy - BTN / 2, bws[i], BTN, UI_LIGHT);
-        TTF_Font *f = b[1] ? ui->small : ui->btn;
-        ui_text(ui, f, b, cx + (bws[i] - ui_text_w(f, b)) / 2, cy, b[1] ? UI_MID : UI_DARK, bws[i]);
+        TTF_Font *f = ui->btn;
+        ui_text(ui, f, b, cx + (bws[i] - ui_text_w(f, b)) / 2, cy, b[1] ? UI_MID : UI_BAR, bws[i]);
         cx += bws[i] + 10;
-        ui_text(ui, ui->small, pairs[i][1], cx, cy, UI_WHITE, lws[i]);
+        ui_text(ui, ui->btn, pairs[i][1], cx, cy, UI_LIGHT, lws[i]);
         cx += lws[i] + 14;
     }
     return w;
 }
 
+
+int ui_title(Ui *ui, const char *s, int maxw) {
+    int tw = ui_text_w(ui->btn, s), inner = maxw - 32;
+    if (tw > inner) tw = inner;
+    ui_pill(ui, PAD, PAD, tw + 32, HINT, UI_BAR);
+    ui_text(ui, ui->btn, s, PAD + 16, PAD + HINT / 2, UI_LIGHT, inner);
+    return tw + 32;
+}

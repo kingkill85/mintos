@@ -70,7 +70,7 @@ static void shadow_text(Ui *ui, const char *s, int x, int cy, SDL_Color c, int m
 }
 
 /* geometry from MinUI's menu (minui-menu-gbc.png at 640x480) */
-#define ITEM_Y (PAD + PILL + 20)    /* first item's top */
+#define ITEM_Y (PAD + HINT + 16)    /* first item's top, as in the launcher list */
 #define PV_X 284
 #define PV_Y 100
 #define PV_W 336
@@ -100,10 +100,7 @@ static void preview_box(Ui *ui, const Menu *m, SDL_Texture *preview) {
 
 void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     /* title pill, battery */
-    int maxw = ui->w - 2 * PAD - PILL - 10 - 48;
-    int tw = ui_text_w(ui->big, title);
-    ui_pill(ui, PAD, PAD, (tw < maxw ? tw : maxw) + 48, PILL, UI_DARK);
-    ui_text(ui, ui->big, title, PAD + 24, PAD + PILL / 2, UI_WHITE, maxw);
+    ui_title(ui, title, ui->w - 2 * PAD - HINT - 14);
     ui_battery(ui);
 
     for (int i = 0; i < m->nitems; i++) {

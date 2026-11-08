@@ -6,6 +6,8 @@
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include "ui.h"
+#include "settings.h"
+#include "../common/settings.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,12 +71,12 @@ static const Sys SYSTEMS[] = {
 #define NSYS (int)(sizeof SYSTEMS / sizeof *SYSTEMS)
 
 /* ---------- entries ---------- */
-enum { K_GAME, K_SYSTEM, K_RECENT, K_POWEROFF };
+enum { K_GAME, K_SYSTEM, K_RECENT, K_SETTINGS };
 typedef struct { int kind, sys; char label[128]; char path[512]; } Entry;
 
 static Entry games[MAXE];   /* current game list */
 static int ngames;
-static Entry root[NSYS + 2];
+static Entry root[NSYS + 3];
 static int nroot;
 
 static int has_ext(const char *f, const char *exts) {
@@ -202,6 +204,9 @@ static void build_root(void) {
             snprintf(root[nroot].label, sizeof root[nroot].label, "%s", SYSTEMS[s].name);
             nroot++;
         }
+    root[nroot].kind = K_SETTINGS; root[nroot].sys = -1;
+    snprintf(root[nroot].label, sizeof root[nroot].label, "Einstellungen");
+    nroot++;
 }
 
 /* ---------- drawing ---------- */
@@ -213,29 +218,57 @@ static int sel, top;
 static int level;          /* 0 = root, 1 = game list */
 static int root_sel;
 static char title[64];
+static int in_settings;   /* level 1 shows the settings pages */
+
+/* header: where we are (dark pill, top left), position "3/41", battery */
+static void draw_header(const char *where, int pos, int n) {
+    ui_battery(&ui);
+    int right = ui.w - PAD - HINT - 14;
+    if (n > 0) {
+        char c[24];
+        snprintf(c, sizeof c, "%d/%d", pos + 1, n);
+        int cw = ui_text_w(ui.btn, c);
+        ui_text(&ui, ui.btn, c, right - cw, PAD + HINT / 2, UI_GRAY, cw);
+        right -= cw + 16;
+    }
+    ui_title(&ui, where, right - PAD);
+}
+
+#define LIST_Y (PAD + HINT + 16)
+#define ROWS ((ui.h - LIST_Y - PAD - HINT - 10) / PILL)
 
 static void draw(const char *status) {
     ui_set(&ui, UI_BLACK);
     SDL_RenderClear(ui.ren);
-    ui_battery(&ui);
 
-    Entry *list = level ? games : root;
-    int n = level ? ngames : nroot;
-    int y0 = PAD, rows = (ui.h - y0 - PAD - HINT) / PILL;
-    if (sel < top) top = sel;
-    if (sel >= top + rows) top = sel - rows + 1;
-    if (n == 0) ui_text(&ui, ui.big, "Keine Spiele", PAD + 24, y0 + PILL / 2, UI_GRAY, ui.w);
-    for (int r = 0; r < rows && top + r < n; r++) {
-        int i = top + r, y = y0 + r * PILL;
-        int maxw = ui.w - 2 * PAD - 48 - (r == 0 ? PILL + 10 : 0);  /* first row leaves room for the battery */
-        Entry *e = &list[i];
-        SDL_Color fg = UI_WHITE;
-        if (i == sel) {
-            int tw = ui_text_w(ui.big, e->label);
-            ui_pill(&ui, PAD, y, (tw < maxw ? tw : maxw) + 48, PILL, UI_WHITE);
-            fg = UI_BLACK;
+    const char *a = NULL;
+    if (in_settings) {
+        draw_header(settings_title(), settings_sel(), settings_count());
+        settings_draw(&ui, LIST_Y, ROWS);
+        if (!status) status = settings_status();
+        a = settings_hint_a();
+    } else {
+        Entry *list = level ? games : root;
+        int n = level ? ngames : nroot;
+        int y0 = LIST_Y, rows = ROWS;
+        draw_header(level ? title : "MintOS", sel, n);
+        if (sel < top) top = sel;
+        if (sel >= top + rows) top = sel - rows + 1;
+        if (n == 0) ui_text(&ui, ui.big, "Keine Spiele", PAD + 24, y0 + PILL / 2, UI_GRAY, ui.w);
+        for (int r = 0; r < rows && top + r < n; r++) {
+            int i = top + r, y = y0 + r * PILL;
+            int maxw = ui.w - 2 * PAD - 48;
+            Entry *e = &list[i];
+            SDL_Color fg = UI_WHITE;
+            if (i == sel) {
+                int tw = ui_text_w(ui.big, e->label);
+                ui_pill(&ui, PAD, y, (tw < maxw ? tw : maxw) + 48, PILL, UI_WHITE);
+                fg = UI_BLACK;
+            }
+            ui_text(&ui, ui.big, e->label, PAD + 24, y + PILL / 2, fg, maxw);
         }
-        ui_text(&ui, ui.big, e->label, PAD + 24, y + PILL / 2, fg, maxw);
+        Entry *e = n ? &list[sel] : NULL;
+        a = !e ? NULL : e->kind == K_GAME ? "STARTEN" : "ÖFFNEN";
     }
 
     if (status) {
@@ -243,8 +276,6 @@ static void draw(const char *status) {
     } else {
         const char *power[][2] = {{"POWER", "AUS"}};
         ui_hints(&ui, PAD, 0, power, 1);
-        Entry *e = n ? &list[sel] : NULL;
-        const char *a = !e ? NULL : e->kind == K_GAME ? "STARTEN" : "ÖFFNEN";
         const char *both[][2] = {{"B", "ZURÜCK"}, {"A", a ? a : ""}};
         if (level && a) ui_hints(&ui, 0, ui.w - PAD, both, 2);
         else if (level) ui_hints(&ui, 0, ui.w - PAD, both, 1);
@@ -289,7 +320,7 @@ static void load_state(void) {
     FILE *f = fopen(CONF "/state", "r");
     if (f) { if (fscanf(f, "%d %d %d", &lv, &rs, &gs) != 3) lv = rs = gs = 0; fclose(f); }
     sel = rs < nroot ? rs : 0;
-    if (lv == 1 && root[sel].kind != K_POWEROFF) {
+    if (lv == 1 && root[sel].kind != K_SETTINGS) {
         open_entry(sel);
         sel = gs < ngames ? gs : 0;
     }
@@ -297,6 +328,9 @@ static void load_state(void) {
 
 static void open_entry(int i) {
     Entry *e = &root[i];
+    root_sel = i;
+    level = 1;
+    if (e->kind == K_SETTINGS) { in_settings = 1; settings_open(); return; }
     if (e->kind == K_RECENT) { load_recent(); snprintf(title, sizeof title, "Zuletzt gespielt"); }
     else { load_system(e->sys); snprintf(title, sizeof title, "%s", e->label); }
     root_sel = i;
@@ -355,9 +389,10 @@ int main(void) {
     if (ui_fonts(&ui, FONT, FONT2) < 0 || open_video() < 0) { fprintf(stderr, "init: %s\n", SDL_GetError()); return 1; }
     build_root();
     load_state();
-    Uint32 held_since = 0, last_rep = 0, last_draw = 0;
-    int held = 0, confirm_off = 0;
+    Uint32 held_since = 0, last_rep = 0, last_draw = 0, last_input = SDL_GetTicks();
+    int held = 0, screen_off = 0;
     const char *status = NULL;
+    bl_power(1);
     /* With KMSDRM the first presented frame after taking over the display (boot, or
      * after RetroArch exits) often never reaches the panel, so the list stayed black
      * until the 30 s battery redraw. Present a few frames to be sure one sticks. */
@@ -389,14 +424,27 @@ int main(void) {
             }
             if (ev.type == SDL_KEYUP) held = 0;
             if (btn < 0) continue;
+            last_input = SDL_GetTicks();
+            if (screen_off) { screen_off = 0; bl_power(1); held = 0; dirty = 1; continue; }   /* the waking key does nothing else */
             dirty = 1;
-            Entry *list = level ? games : root;
-            int n = level ? ngames : nroot;
             /* SDL names buttons by position (Xbox layout). The RG353V prints Nintendo
              * labels: its A is the right button (SDL "B"), its B the bottom one (SDL "A"). */
             int press_a = btn == SDL_CONTROLLER_BUTTON_B, press_b = btn == SDL_CONTROLLER_BUTTON_A;
-            if (!press_a) { confirm_off = 0; status = NULL; }
-            int page = (ui.h - PAD - HINT - 8 - PAD - HINT - 8) / PILL;
+            int nav = btn == SDL_CONTROLLER_BUTTON_DPAD_UP ? NAV_UP : btn == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? NAV_DOWN
+                    : btn == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? NAV_LEFT : btn == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? NAV_RIGHT
+                    : press_a ? NAV_A : press_b ? NAV_B : -1;
+            if (in_settings) {
+                if (nav >= 0 && settings_key(nav)) {
+                    in_settings = 0; level = 0; build_root();
+                    sel = root_sel < nroot ? root_sel : 0; top = 0;
+                }
+                if (nav >= NAV_UP && nav <= NAV_RIGHT) { held = btn; held_since = last_rep = SDL_GetTicks(); }
+                continue;
+            }
+            Entry *list = level ? games : root;
+            int n = level ? ngames : nroot;
+            status = NULL;
+            int page = ROWS;
             if (btn == SDL_CONTROLLER_BUTTON_DPAD_UP) move(-1, n);
             else if (btn == SDL_CONTROLLER_BUTTON_DPAD_DOWN) move(1, n);
             else if (btn == SDL_CONTROLLER_BUTTON_DPAD_LEFT || btn == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
@@ -408,10 +456,7 @@ int main(void) {
                 sel = root_sel < nroot ? root_sel : 0; top = 0;
             } else if (press_a && n) {
                 Entry *e = &list[sel];
-                if (e->kind == K_POWEROFF) {
-                    if (confirm_off) { save_state(); close_video(); if (system("systemctl poweroff") < 0) {} return 0; }
-                    confirm_off = 1; status = "Nochmal A zum Ausschalten";
-                } else if (e->kind == K_GAME) {
+                if (e->kind == K_GAME) {
                     draw("Startet ...");
                     launch(e);
                 } else {
@@ -423,12 +468,21 @@ int main(void) {
             }
         }
         Uint32 now = SDL_GetTicks();
-        if (held && now - held_since > 350 && now - last_rep > 70) {
-            move(held == SDL_CONTROLLER_BUTTON_DPAD_UP ? -1 : 1, level ? ngames : nroot);
+        if (held && now - held_since > 350 && now - last_rep > (in_settings ? 120 : 70)) {
+            if (in_settings)
+                settings_key(held == SDL_CONTROLLER_BUTTON_DPAD_UP ? NAV_UP : held == SDL_CONTROLLER_BUTTON_DPAD_DOWN ? NAV_DOWN
+                             : held == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? NAV_LEFT : NAV_RIGHT);
+            else
+                move(held == SDL_CONTROLLER_BUTTON_DPAD_UP ? -1 : 1, level ? ngames : nroot);
             last_rep = now; dirty = 1;
         }
+        /* screen off after the chosen idle time (settings: "Bildschirm aus") */
+        static int off_min = -1;
+        static Uint32 last_cfg;
+        if (off_min < 0 || now - last_cfg > 1000) { off_min = kv_get_int(SETTINGS_FILE, "screen_off", 3); last_cfg = now; }
+        if (!screen_off && off_min > 0 && now - last_input > (Uint32)off_min * 60000) { screen_off = 1; bl_power(0); }
         if (now - last_draw > 30000) dirty = 1;  /* keep the battery current */
-        if (dirty) { draw(status); last_draw = now; }
+        if (dirty && !screen_off) { draw(status); last_draw = now; }
         SDL_Delay(10);
     }
 }
