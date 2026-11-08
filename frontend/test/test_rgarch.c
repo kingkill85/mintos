@@ -1,6 +1,6 @@
 // uses:
 // so: frontend/test/testcore.c
-// bin: rgarch-host frontend/main.c frontend/core.c frontend/paths.c frontend/config.c frontend/viewport.c frontend/video.c frontend/audio.c frontend/ratecontrol.c frontend/input.c frontend/inputmap.c frontend/state.c frontend/menu.c frontend/archive.c common/ui.c
+// bin: rgarch-host frontend/main.c frontend/core.c frontend/paths.c frontend/config.c frontend/viewport.c frontend/video.c frontend/audio.c frontend/ratecontrol.c frontend/input.c frontend/inputmap.c frontend/state.c frontend/menu.c frontend/archive.c frontend/gameopts.c common/ui.c common/settings.c
 /* Runs a host build of rgarch with the test core (SDL dummy drivers). */
 #include <string.h>
 #include <stdlib.h>

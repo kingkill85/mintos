@@ -204,6 +204,11 @@ static void build_root(void) {
             snprintf(root[nroot].label, sizeof root[nroot].label, "%s", SYSTEMS[s].name);
             nroot++;
         }
+    static const char *dirs[NSYS], *names[NSYS];
+    int ns = 0;
+    for (int i = 0; i < nroot; i++)
+        if (root[i].kind == K_SYSTEM) { dirs[ns] = SYSTEMS[root[i].sys].dir; names[ns] = SYSTEMS[root[i].sys].name; ns++; }
+    settings_set_systems(dirs, names, ns);
     root[nroot].kind = K_SETTINGS; root[nroot].sys = -1;
     snprintf(root[nroot].label, sizeof root[nroot].label, "Einstellungen");
     nroot++;

@@ -1,5 +1,7 @@
 #include "menu.h"
+#include "gameopts.h"
 #include <stdio.h>
+#include <string.h>
 
 void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
     *m = (Menu){.can_state = can_state, .slot = last_slot >= 0 && last_slot < MENU_SLOTS ? last_slot : 0};
@@ -9,7 +11,50 @@ void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
     m->items[m->nitems++] = M_QUIT;
 }
 
+void menu_set_options(Menu *m, bool has_frame, const int vals[MO_N]) {
+    m->items[m->nitems] = m->items[m->nitems - 1];   /* before Beenden */
+    m->items[m->nitems - 1] = M_OPTIONS;
+    m->nitems++;
+    memcpy(m->val, vals, sizeof m->val);
+    m->nopts = 0;
+    m->opts[m->nopts++] = MO_SCALE;
+    m->opts[m->nopts++] = MO_FILTER;
+    if (has_frame) m->opts[m->nopts++] = MO_FRAME;
+    m->opts[m->nopts++] = MO_BRIGHT;
+}
+
+const char *menu_opt_value(Menu *m, int i) {
+    MenuOpt o = m->opts[i];
+    if (o == MO_BRIGHT) { snprintf(m->text, sizeof m->text, "%d/10", m->val[o]); return m->text; }
+    return gameopt_choice((GameOpt)o, m->val[o]);
+}
+
+static const char *opt_label(MenuOpt o) { return o == MO_BRIGHT ? "Helligkeit" : gameopt_label((GameOpt)o); }
+
+static MenuAction opt_key(Menu *m, int id) {
+    MenuOpt o = m->opts[m->osel];
+    int d = id == RETRO_DEVICE_ID_JOYPAD_RIGHT ? 1 : -1;
+    switch (id) {
+    case RETRO_DEVICE_ID_JOYPAD_UP: m->osel = (m->osel + m->nopts - 1) % m->nopts; break;
+    case RETRO_DEVICE_ID_JOYPAD_DOWN: m->osel = (m->osel + 1) % m->nopts; break;
+    case RETRO_DEVICE_ID_JOYPAD_LEFT: case RETRO_DEVICE_ID_JOYPAD_RIGHT:
+        if (o == MO_BRIGHT) {
+            int v = m->val[o] + d;
+            if (v < 1 || v > 10) return M_NONE;
+            m->val[o] = v;
+        } else {
+            int n = gameopt_count((GameOpt)o);
+            m->val[o] = (m->val[o] + d + n) % n;
+        }
+        m->changed = o;
+        return M_OPTION;
+    case RETRO_DEVICE_ID_JOYPAD_B: m->page = false; break;
+    }
+    return M_NONE;
+}
+
 bool menu_on_slot_item(const Menu *m) {
+    if (m->page) return false;
     return m->items[m->sel] == M_SAVE || m->items[m->sel] == M_LOAD;
 }
 
@@ -41,6 +86,8 @@ void menu_failed(Menu *m, MenuAction a) {
 
 MenuAction menu_key(Menu *m, int id) {
     m->msg = NULL;
+    if (m->page) return opt_key(m, id);
+    if (id == RETRO_DEVICE_ID_JOYPAD_A && m->items[m->sel] == M_OPTIONS) { m->page = true; m->osel = 0; return M_NONE; }
     switch (id) {
     case RETRO_DEVICE_ID_JOYPAD_UP: m->sel = (m->sel + m->nitems - 1) % m->nitems; break;
     case RETRO_DEVICE_ID_JOYPAD_DOWN: m->sel = (m->sel + 1) % m->nitems; break;
@@ -58,6 +105,7 @@ const char *menu_label(MenuAction a) {
     case M_SAVE: return "Speichern";
     case M_LOAD: return "Laden";
     case M_GAMEMENU: return "ScummVM-Menü";
+    case M_OPTIONS: return "Optionen";
     case M_QUIT: return "Beenden";
     default: return "";
     }
@@ -98,22 +146,51 @@ static void preview_box(Ui *ui, const Menu *m, SDL_Texture *preview) {
     }
 }
 
-void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
-    /* title pill, battery */
-    ui_title(ui, title, ui->w - 2 * PAD - HINT - 14);
-    ui_battery(ui);
-
-    for (int i = 0; i < m->nitems; i++) {
-        const char *s = menu_item_text(m, i);
-        int y = ITEM_Y + i * PILL;
-        if (i == m->sel) {
-            ui_pill(ui, PAD, y, ui_text_w(ui->big, s) + 48, PILL, UI_WHITE);
-            ui_text(ui, ui->big, s, PAD + 24, y + PILL / 2, UI_BLACK, ui->w);
+/* options page: label left, value right; the selected line is a full-width pill */
+static void draw_options(Ui *ui, Menu *m) {
+    for (int i = 0; i < m->nopts; i++) {
+        int y = ITEM_Y + i * PILL, cy = y + PILL / 2, on = i == m->osel;
+        const char *v = menu_opt_value(m, i);
+        char sel[64];
+        if (on) snprintf(sel, sizeof sel, "< %s >", v);
+        const char *vs = on ? sel : v;
+        int vw = ui_text_w(ui->small, vs), right = ui->w - PAD - 24;
+        if (on) {
+            ui_pill(ui, PAD, y, ui->w - 2 * PAD, PILL, UI_WHITE);
+            ui_text(ui, ui->big, opt_label(m->opts[i]), PAD + 24, cy, UI_BLACK, ui->w);
+            ui_text(ui, ui->small, vs, right - vw, cy, UI_BLACK, vw);
         } else {
-            shadow_text(ui, s, PAD + 24, y + PILL / 2, UI_WHITE, ui->w);
+            shadow_text(ui, opt_label(m->opts[i]), PAD + 24, cy, UI_WHITE, ui->w);
+            ui_text(ui, ui->small, vs, right - vw + 2, cy + 2, UI_BLACK, vw);
+            ui_text(ui, ui->small, vs, right - vw, cy, UI_WHITE, vw);
         }
     }
-    if (menu_on_slot_item(m)) preview_box(ui, m, preview);
+}
+
+void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
+    /* title pill, battery */
+    char where[300];
+    snprintf(where, sizeof where, m->page ? "%s › Optionen" : "%s", title);
+    ui_title(ui, where, ui->w - 2 * PAD - HINT - 14);
+    ui_battery(ui);
+
+    if (m->page) {
+        draw_options(ui, m);
+    } else {
+        /* six items (with Disc wechseln and Optionen) only fit with tighter rows */
+        int step = m->nitems > 5 ? 52 : PILL;
+        for (int i = 0; i < m->nitems; i++) {
+            const char *s = menu_item_text(m, i);
+            int y = ITEM_Y + i * step + (step - PILL) / 2;
+            if (i == m->sel) {
+                ui_pill(ui, PAD, y, ui_text_w(ui->big, s) + 48, PILL, UI_WHITE);
+                ui_text(ui, ui->big, s, PAD + 24, y + PILL / 2, UI_BLACK, ui->w);
+            } else {
+                shadow_text(ui, s, PAD + 24, y + PILL / 2, UI_WHITE, ui->w);
+            }
+        }
+        if (menu_on_slot_item(m)) preview_box(ui, m, preview);
+    }
 
     if (m->msg) {
         ui_text(ui, ui->small, m->msg, PAD + 24 + 2, ui->h - PAD - HINT - 30 + 2, UI_BLACK, ui->w);
@@ -122,5 +199,5 @@ void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     const char *power[][2] = {{"POWER", "AUS"}};
     ui_hints(ui, PAD, 0, power, 1);
     const char *nav[][2] = {{"B", "ZURÜCK"}, {"A", "OK"}};
-    ui_hints(ui, 0, ui->w - PAD, nav, 2);
+    ui_hints(ui, 0, ui->w - PAD, nav, m->page ? 1 : 2);
 }

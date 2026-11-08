@@ -1,4 +1,4 @@
-// uses: frontend/menu.c common/ui.c
+// uses: frontend/menu.c frontend/gameopts.c frontend/config.c common/ui.c
 // libs: $(pkg-config --libs sdl2 SDL2_ttf SDL2_image)
 #include <string.h>
 #include "check.h"

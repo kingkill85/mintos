@@ -13,6 +13,8 @@
 #include "audio.h"
 #include "config.h"
 #include "core.h"
+#include "gameopts.h"
+#include "settings.h"
 #include "input.h"
 #include "menu.h"
 #include "paths.h"
@@ -30,7 +32,7 @@ static void on_term(int s) { (void)s; quit_signal = 1; }
 static Core core;
 static SystemCfg cfg;
 static Ui ui;
-static const char *rom;
+static const char *rom, *sysname;
 static char title[256];
 /* a key combo for the core, sent once the game runs again (down on one frame, up on the next) */
 static struct { unsigned code; uint16_t mod; int step; } pending;
@@ -44,6 +46,25 @@ static void on_video(const void *d, unsigned w, unsigned h, size_t pitch) { vide
 static float aspect(void) { return core.av.geometry.aspect_ratio; }
 
 static const char *root(void) { const char *r = getenv("RGARCH_ROOT"); return r ? r : ""; }
+
+/* systems.cfg, then the player's own choices from user.cfg; -1 without systems.cfg */
+static int load_cfg(void) {
+    char p[1024];
+    snprintf(p, sizeof p, "%s%s", root(), CONFIG_FILE);
+    int r = config_load(p, sysname, &cfg);
+    snprintf(p, sizeof p, "%s%s", root(), USER_CONFIG_FILE);
+    config_merge(p, sysname, &cfg);
+    return r;
+}
+
+/* Optionen in the menu: picture options are stored per system and apply at once */
+static void apply_option(Menu *m) {
+    if (m->changed == MO_BRIGHT) { bl_set(m->val[MO_BRIGHT]); return; }
+    char p[1024];
+    snprintf(p, sizeof p, "%s%s", root(), USER_CONFIG_FILE);
+    gameopt_set(p, sysname, (GameOpt)m->changed, m->val[m->changed]);
+    load_cfg();
+}
 
 /* game name for the menu: RGARCH_TITLE, else the file name without extension */
 static void make_title(void) {
@@ -85,6 +106,15 @@ static bool run_menu(int *slot) {
     Menu m;
     menu_init(&m, core.can_state || kstates, *slot, core.keyboard != NULL && !core.can_state);
     menu_set_discs(&m, core_disc_count(&core), core_disc_index(&core));
+    {
+        char u[1024], s[1024];
+        snprintf(u, sizeof u, "%s%s", root(), USER_CONFIG_FILE);
+        snprintf(s, sizeof s, "%s%s", root(), CONFIG_FILE);
+        int b = bl_get();
+        int vals[MO_N] = {gameopt_get(u, sysname, GO_SCALE), gameopt_get(u, sysname, GO_FILTER),
+                          gameopt_get(u, sysname, GO_FRAME), b > 0 ? b : 5};
+        menu_set_options(&m, gameopt_has_frame(s, sysname), vals);
+    }
     audio_pause(true);
     input_clear();
     SDL_Texture *pv = NULL;
@@ -122,6 +152,7 @@ static bool run_menu(int *slot) {
                 core_disc_next(&core);
                 open = false;
                 break;
+            case M_OPTION: apply_option(&m); break;
             case M_QUIT: open = false; keep = false; break;
             default: break;
             }
@@ -149,14 +180,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: rgarch [--resume] <system> <rom>\n");
         return 2;
     }
-    const char *system = argv[1 + resume];
+    const char *system = sysname = argv[1 + resume];
     rom = argv[2 + resume];
     signal(SIGTERM, on_term);
     signal(SIGINT, on_term);
 
     char path[1024];
-    snprintf(path, sizeof path, "%s%s", root(), CONFIG_FILE);
-    if (config_load(path, system, &cfg)) rg_log("no %s, using defaults\n", path);
+    if (load_cfg()) rg_log("no %s%s, using defaults\n", root(), CONFIG_FILE);
     make_title();
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER | SDL_INIT_TIMER);

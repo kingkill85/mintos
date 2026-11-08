@@ -4,6 +4,8 @@
 
 enum { NAV_UP, NAV_DOWN, NAV_LEFT, NAV_RIGHT, NAV_A, NAV_B };
 
+/* systems with games (folder, display name) for "Spiel-Optionen"; strings must stay valid */
+void settings_set_systems(const char *const *dirs, const char *const *names, int n);
 void settings_open(void);
 /* 1 when B left the settings */
 int settings_key(int nav);

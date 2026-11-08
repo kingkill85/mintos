@@ -3,6 +3,7 @@
  *   Info: read-only lines */
 #include "settings.h"
 #include "../common/settings.h"
+#include "gameopts.h"
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -17,14 +18,27 @@
 #define MINTOS_VERSION "dev"
 #endif
 
-typedef enum { I_BRIGHT, I_VOLUME, I_SCREENOFF, I_INFO, I_REBOOT, I_POWEROFF, I_TEXT } ItemId;
-typedef enum { P_MAIN, P_INFO } Page;
+typedef enum { I_BRIGHT, I_VOLUME, I_GAMEOPTS, I_SCREENOFF, I_INFO, I_REBOOT, I_POWEROFF, I_TEXT, I_SYSTEM, I_GAMEOPT } ItemId;
+typedef enum { P_MAIN, P_INFO, P_SYSTEMS, P_GAME } Page;
 
-typedef struct { ItemId id; char label[64]; char value[96]; int bar; } Item;   /* bar: 0..10, -1 none */
+typedef struct { ItemId id; char label[64]; char value[96]; int bar, arg; } Item;   /* bar: 0..10, -1 none */
 
 static Page page;
-static Item items[16];
-static int nitems, sel, main_sel, confirm;
+static Item items[64];
+static int nitems, sel, main_sel, sys_sel, confirm;
+static const char *const *sys_dirs, *const *sys_names;
+static int nsys, cur_sys;
+static char title[128];
+
+void settings_set_systems(const char *const *dirs, const char *const *names, int n) {
+    sys_dirs = dirs; sys_names = names; nsys = n;
+}
+
+/* runs in rgarch (has a section with a core in systems.cfg): only those use the options */
+static int in_rgarch(const char *dir) {
+    char v[64];
+    return !config_get(CONFIG_FILE, dir, "core", v, sizeof v) && *v;
+}
 static const char *status;
 
 static const int OFF_MIN[] = {0, 1, 3, 5};
@@ -75,11 +89,23 @@ static void build(void) {
         it = add(I_VOLUME, "Lautstärke");
         int v = vol_get();
         it->bar = v < 0 ? -1 : (v + 5) / 10;
+        add(I_GAMEOPTS, "Spiel-Optionen");
         it = add(I_SCREENOFF, "Bildschirm aus");
         snprintf(it->value, sizeof it->value, "%s", OFF_TXT[off_index()]);
         add(I_INFO, "Info");
         add(I_REBOOT, "Neustart");
         add(I_POWEROFF, "Ausschalten");
+    } else if (page == P_SYSTEMS) {
+        for (int i = 0; i < nsys && nitems < 64; i++)
+            if (in_rgarch(sys_dirs[i])) add(I_SYSTEM, sys_names[i])->arg = i;
+    } else if (page == P_GAME) {
+        const char *d = sys_dirs[cur_sys];
+        for (int o = 0; o < GO_N; o++) {
+            if (o == GO_FRAME && !gameopt_has_frame(CONFIG_FILE, d)) continue;
+            Item *it = add(I_GAMEOPT, gameopt_label(o));
+            it->arg = o;
+            snprintf(it->value, sizeof it->value, "%s", gameopt_choice(o, gameopt_get(USER_CONFIG_FILE, d, o)));
+        }
     } else {
         Item *it = add(I_TEXT, "System");
         snprintf(it->value, sizeof it->value, "MintOS %s", MINTOS_VERSION);
@@ -97,18 +123,26 @@ static void build(void) {
         if (!uname(&u)) snprintf(it->value, sizeof it->value, "%s", u.release);
     }
     if (sel >= nitems) sel = nitems - 1;
+    if (sel < 0) sel = 0;
 }
 
 void settings_open(void) { page = P_MAIN; sel = 0; confirm = 0; status = NULL; build(); }
 
-const char *settings_title(void) { return page == P_MAIN ? "Einstellungen" : "Einstellungen › Info"; }
+const char *settings_title(void) {
+    switch (page) {
+    case P_INFO: return "Einstellungen › Info";
+    case P_SYSTEMS: return "Einstellungen › Spiel-Optionen";
+    case P_GAME: snprintf(title, sizeof title, "Spiel-Optionen › %s", sys_names[cur_sys]); return title;
+    default: return "Einstellungen";
+    }
+}
 int settings_count(void) { return nitems; }
 int settings_sel(void) { return sel; }
 const char *settings_status(void) { return status; }
 
 const char *settings_hint_a(void) {
     switch (items[sel].id) {
-    case I_INFO: return "ÖFFNEN";
+    case I_INFO: case I_GAMEOPTS: case I_SYSTEM: return "ÖFFNEN";
     case I_REBOOT: case I_POWEROFF: return "OK";
     default: return NULL;
     }
@@ -124,6 +158,12 @@ static void change(Item *it, int d) {
         kv_set(SETTINGS_FILE, "screen_off", m);
         break;
     }
+    case I_GAMEOPT: {
+        const char *dir = sys_dirs[cur_sys];
+        int n = gameopt_count(it->arg);
+        gameopt_set(USER_CONFIG_FILE, dir, it->arg, cycle(gameopt_get(USER_CONFIG_FILE, dir, it->arg), d, n));
+        break;
+    }
     default: break;
     }
 }
@@ -136,10 +176,13 @@ int settings_key(int nav) {
     case NAV_LEFT: case NAV_RIGHT: change(&items[sel], nav == NAV_LEFT ? -1 : 1); break;
     case NAV_B:
         if (page == P_MAIN) return 1;
-        page = P_MAIN; sel = main_sel;
+        if (page == P_GAME) { page = P_SYSTEMS; sel = sys_sel; }
+        else { page = P_MAIN; sel = main_sel; }
         break;
     case NAV_A:
         if (items[sel].id == I_INFO) { main_sel = sel; page = P_INFO; sel = 0; }
+        else if (items[sel].id == I_GAMEOPTS) { main_sel = sel; page = P_SYSTEMS; sel = 0; }
+        else if (items[sel].id == I_SYSTEM) { sys_sel = sel; cur_sys = items[sel].arg; page = P_GAME; sel = 0; }
         else if (items[sel].id == I_REBOOT || items[sel].id == I_POWEROFF) {
             int off = items[sel].id == I_POWEROFF;
             if (confirm) {
@@ -175,11 +218,13 @@ void settings_draw(Ui *ui, int y0, int rows) {
             right = x - 16;
         } else if (it->value[0]) {
             int maxw = (ui->w - 2 * PAD) / 2 + 40;
-            int vw = ui_text_w(ui->small, it->value);
+            char v[110];
+            snprintf(v, sizeof v, on && it->id != I_TEXT ? "< %s >" : "%s", it->value);
+            int vw = ui_text_w(ui->small, v);
             if (vw > maxw) vw = maxw;
-            ui_text(ui, ui->small, it->value, right - vw, cy, it->id == I_TEXT ? dim : fg, maxw);
+            ui_text(ui, ui->small, v, right - vw, cy, it->id == I_TEXT ? dim : fg, maxw);
             right -= vw + 16;
-        } else if (it->id == I_INFO) {
+        } else if (it->id == I_INFO || it->id == I_GAMEOPTS || it->id == I_SYSTEM) {
             ui_text(ui, ui->big, "›", right - ui_text_w(ui->big, "›"), cy, dim, 40);
         }
         ui_text(ui, ui->big, it->label, PAD + 24, cy, fg, right - PAD - 24);
