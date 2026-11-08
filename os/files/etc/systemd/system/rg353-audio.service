@@ -1,0 +1,11 @@
+[Unit]
+Description=Switch rk817 output between speaker and headphones
+After=sound.target
+
+[Service]
+ExecStart=/usr/local/sbin/rg353-audio
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

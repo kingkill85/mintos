@@ -1,0 +1,16 @@
+build/
+*.gb
+*.gbc
+*.gba
+*.nes
+*.sfc
+*.smc
+*.sms
+*.gg
+*.md
+!README.md
+*.bin
+*.cue
+*.zip
+*.7z
+fonts

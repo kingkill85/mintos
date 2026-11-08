@@ -1,0 +1,16 @@
+#!/bin/sh
+# Boot another kernel exactly once (see /boot/boot.cmd):
+#   rg353-try-kernel <Image> [<initrd>|none] [extra kernel args]
+# If it hangs, power-cycle: the default kernel boots again.
+[ -n "$1" ] || { echo "usage: $0 <Image> [<initrd>|none] [args]"; exit 1; }
+K=$1; I=${2:-none}; shift; [ $# -gt 0 ] && shift
+[ -f "/boot/$K" ] || { echo "/boot/$K missing"; exit 1; }
+[ "$I" = none ] || [ -f "/boot/$I" ] || { echo "/boot/$I missing"; exit 1; }
+{
+  echo "kernel=$K"
+  echo "initrd=$I"
+  [ $# -gt 0 ] && echo "args=root=LABEL=rootfs rootwait rw console=ttyS2,1500000 console=tty3 quiet loglevel=3 vt.global_cursor_default=0 $*"
+} > /boot/boot-test.env
+printf 1 > /boot/boot-test
+sync
+echo "next boot: $K (initrd $I), once"

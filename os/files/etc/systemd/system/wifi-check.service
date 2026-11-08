@@ -1,0 +1,11 @@
+[Unit]
+Description=Reload rtw88 until Wi-Fi connects
+After=iwd.service
+Wants=iwd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/wifi-check
+
+[Install]
+WantedBy=multi-user.target

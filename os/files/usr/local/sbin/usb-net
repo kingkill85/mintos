@@ -1,0 +1,23 @@
+#!/bin/sh
+# USB network gadget (NCM) so the device is reachable even without Wi-Fi:
+#   PC side gets a link; device is 10.55.0.2 (set the PC to 10.55.0.1/24).
+modprobe libcomposite 2>/dev/null
+mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config
+G=/sys/kernel/config/usb_gadget/rg353v
+[ -d $G ] && exit 0
+mkdir -p $G && cd $G || exit 1
+echo 0x1d6b > idVendor; echo 0x0104 > idProduct
+mkdir -p strings/0x409; echo rg353v > strings/0x409/product; echo kingkill85 > strings/0x409/manufacturer
+mkdir -p configs/c.1 functions/ncm.usb0
+ln -s functions/ncm.usb0 configs/c.1/
+UDC=$(ls /sys/class/udc | head -1)
+[ -n "$UDC" ] && echo "$UDC" > UDC
+# with dwc3 built in it sometimes fails "to enable ep0out"; re-probing the controller helps
+if [ -n "$UDC" ] && ! grep -qE "configured|addressed|default|powered" /sys/class/udc/$UDC/state 2>/dev/null; then
+  echo "" > UDC
+  echo $UDC > /sys/bus/platform/drivers/dwc3/unbind; sleep 1; echo $UDC > /sys/bus/platform/drivers/dwc3/bind; sleep 2
+  echo "$UDC" > UDC
+fi
+for i in 1 2 3 4 5; do ip link show usb0 >/dev/null 2>&1 && break; sleep 1; done
+ip addr add 10.55.0.2/24 dev usb0 2>/dev/null
+ip link set usb0 up

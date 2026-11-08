@@ -1,0 +1,11 @@
+[Unit]
+Description=SSH over USB: NCM gadget at 10.55.0.2
+After=sys-kernel-config.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/usb-net
+
+[Install]
+WantedBy=multi-user.target

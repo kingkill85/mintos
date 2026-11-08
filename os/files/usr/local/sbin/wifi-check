@@ -1,0 +1,25 @@
+#!/bin/sh
+# Get the RTL8821CS (SDIO on controller fe000000.mmc) connected after boot. Seen failures:
+#  - card not detected at all (dw_mmc built in: the controller probes before the chip has
+#    power/clock) -> re-probe the controller, which re-detects the card;
+#  - rtw88 firmware upload errors (-84/-110) when it loads early -> reload rtw88.
+HOST=fe000000.mmc
+DRV=/sys/bus/platform/drivers/dwmmc_rockchip
+connected() { iwctl station wlan0 show 2>/dev/null | grep -qE 'State +connected'; }
+wait_connected() { for i in $(seq 1 "$1"); do connected && return 0; sleep 2; done; return 1; }
+wait_connected 15 && { echo "wifi connected"; exit 0; }
+for try in 1 2 3 4 5 6 7 8; do
+  modprobe -r rtw88_8821cs rtw88_8821c rtw88_sdio rtw88_core 2>/dev/null
+  if [ -z "$(ls /sys/bus/sdio/devices 2>/dev/null)" ]; then
+    echo "try $try: no SDIO card, re-probing $HOST"
+    echo $HOST > $DRV/unbind; sleep 1; echo $HOST > $DRV/bind; sleep 3
+  else
+    echo "try $try: reloading rtw88"
+    sleep 2
+  fi
+  modprobe rtw88_8821cs; sleep 4
+  [ -e /sys/class/net/wlan0 ] || continue
+  systemctl restart iwd
+  wait_connected 15 && { echo "wifi connected (try $try)"; exit 0; }
+done
+echo "wifi failed"; exit 1

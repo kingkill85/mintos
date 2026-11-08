@@ -1,0 +1,49 @@
+#!/usr/bin/python3
+"""Audio helper for the RG353V (rk817 codec on mainline).
+
+- Routes output to the speaker, or to the headphones while a plug is in. Mainline
+  leaves "Playback Mux" on HP, so the speaker stays silent. The jack state is the ALSA
+  card control "Headphones Jack"; changes arrive as SW_HEADPHONE_INSERT events.
+- Volume buttons (gpio-keys-vol) change "Master" in 5 % steps; holding repeats.
+"""
+import asyncio
+import subprocess
+import evdev
+from evdev import ecodes as e
+
+
+def amixer(*args):
+    return subprocess.run(["amixer", "-c", "rk817int", *args], capture_output=True, text=True).stdout
+
+
+def route():
+    out = "HP" if ": values=on" in amixer("cget", "iface=CARD,name=Headphones Jack") else "SPK"
+    amixer("-q", "sset", "Playback Mux", out)
+    print("audio ->", out, flush=True)
+
+
+async def jack(dev):
+    async for ev in dev.async_read_loop():
+        if ev.type == e.EV_SW and ev.code == e.SW_HEADPHONE_INSERT:
+            route()
+
+
+async def volume(dev):
+    async for ev in dev.async_read_loop():
+        if ev.type == e.EV_KEY and ev.value in (1, 2):  # press or autorepeat
+            if ev.code == e.KEY_VOLUMEUP:
+                amixer("-q", "sset", "Master", "5%+")
+            elif ev.code == e.KEY_VOLUMEDOWN:
+                amixer("-q", "sset", "Master", "5%-")
+
+
+async def main():
+    devs = {evdev.InputDevice(p).name: evdev.InputDevice(p) for p in evdev.list_devices()}
+    route()
+    tasks = [jack(d) for n, d in devs.items() if n.endswith("Headphones")]
+    tasks += [volume(d) for n, d in devs.items() if n == "gpio-keys-vol"]
+    await asyncio.gather(*tasks)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
