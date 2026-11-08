@@ -1,4 +1,4 @@
-// uses: frontend/audio.c frontend/ratecontrol.c frontend/core.c frontend/paths.c
+// uses: frontend/audio.c frontend/ratecontrol.c frontend/core.c frontend/paths.c frontend/archive.c
 // libs: $(pkg-config --libs sdl2)
 #include <string.h>
 #include "check.h"
@@ -33,6 +33,14 @@ int main(void) {
     CHECK_INT(audio_playing(), 0);       /* after the menu: prefill again */
     for (int i = 0; i < 20; i++) audio_push(buf, 800);
     CHECK_INT(audio_playing(), 1);
+    audio_close();
+
+    /* audio_wait leaves the rate control room up to 2x the target (1.5x: no waiting) */
+    CHECK_INT(audio_open(48000.0), 0);
+    for (int i = 0; i < 24; i++) audio_push(buf, 192);    /* ~96 ms = 1.5 x 64 ms */
+    Uint32 w0 = SDL_GetTicks();
+    audio_wait();
+    CHECK(SDL_GetTicks() - w0 < 8);
     audio_close();
 
     /* starved queue: the stream must take a LOWER input rate (more output per core sample) */

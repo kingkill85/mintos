@@ -51,6 +51,7 @@ static void make_title(void) {
 static int error_page(void) {
     Uint32 until = getenv("RGARCH_ERROR_TIMEOUT") ? SDL_GetTicks() + 1000 * atoi(getenv("RGARCH_ERROR_TIMEOUT")) : 0;
     for (;;) {
+        if (quit_signal) return 0;        /* power key: switch off without waiting */
         input_poll();
         int k;
         while ((k = input_take_press()) >= 0)
@@ -88,13 +89,17 @@ static bool run_menu(int *slot) {
             case M_CONTINUE: open = false; break;
             case M_SAVE: {
                 SDL_Surface *s = video_snapshot(320, 240);
-                state_save(&core, rom, m.slot, s);
+                bool ok = state_save(&core, rom, m.slot, s);
                 if (s) SDL_FreeSurface(s);
-                open = false;
+                if (ok) open = false; else menu_failed(&m, M_SAVE);
+                pv_slot = -2;   /* reload the preview */
                 break;
             }
             case M_LOAD:
-                if (state_exists(rom, m.slot)) { state_load(&core, rom, m.slot); open = false; }
+                /* an empty slot does nothing (its preview says "Leer") */
+                if (state_exists(rom, m.slot)) {
+                    if (state_load(&core, rom, m.slot)) open = false; else menu_failed(&m, M_LOAD);
+                }
                 break;
             case M_QUIT: open = false; keep = false; break;
             default: break;
@@ -159,7 +164,8 @@ int main(int argc, char **argv) {
 
     int slot = 0;
     Uint32 last_sram = SDL_GetTicks();
-    bool first = true;
+    bool first = true, ran = false;   /* ran: the game ran (and a resume was tried) */
+    if (getenv("RGARCH_TEST_TERM_EARLY")) raise(SIGTERM);   /* test: power key during start-up */
     while (!quit_signal) {
         if (input_poll() && !run_menu(&slot)) break;
         Uint32 t_a = SDL_GetTicks();
@@ -167,6 +173,7 @@ int main(int argc, char **argv) {
         Uint32 t_b = SDL_GetTicks();
         if (first && resume) state_load(&core, rom, -1);
         first = false;
+        ran = true;
         video_draw(&cfg, aspect(), false);
         video_flip();
         Uint32 t_c = SDL_GetTicks();
@@ -180,7 +187,8 @@ int main(int argc, char **argv) {
         }
         if (SDL_GetTicks() - last_sram > SRAM_EVERY_MS) { state_sram_save(&core, rom); last_sram = SDL_GetTicks(); }
     }
-    if (quit_signal && core.can_state) state_save(&core, rom, -1, NULL);
+    /* not before the first frame: that would replace a good resume point with a fresh boot */
+    if (quit_signal && core.can_state && ran) state_save(&core, rom, -1, NULL);
     state_sram_save(&core, rom);
     audio_close();
     core_unload(&core);

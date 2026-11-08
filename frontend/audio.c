@@ -46,7 +46,8 @@ size_t audio_push(const int16_t *s, size_t frames) {
 
 void audio_wait(void) {
     if (!dev) return;
-    for (int i = 0; i < 100 && SDL_GetQueuedAudioSize(dev) > TARGET; i++) SDL_Delay(1);
+    /* up to 2x TARGET: rate_adjust reaches its -0.5 % there, enough for 59.73 Hz on a 60 Hz panel */
+    for (int i = 0; i < 100 && SDL_GetQueuedAudioSize(dev) > 2 * TARGET; i++) SDL_Delay(1);
 }
 
 void audio_pause(bool on) {

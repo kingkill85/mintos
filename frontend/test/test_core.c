@@ -1,4 +1,4 @@
-// uses: frontend/core.c frontend/paths.c
+// uses: frontend/core.c frontend/paths.c frontend/archive.c
 // so: frontend/test/testcore.c
 #include <string.h>
 #include <stdlib.h>
@@ -24,6 +24,9 @@ int main(void) {
     Core c = {.on_video = on_video, .on_audio = on_audio, .on_input = on_input};
     CHECK_INT(core_load(&c, "./testcore.so", rom), 0);
     CHECK_STR(c.info.library_name, "testcore");
+    /* the save directory exists before the core writes its own files there */
+    snprintf(opt, sizeof opt, "%s/storage/saves/test", root);
+    CHECK(access(opt, F_OK) == 0);
     CHECK_INT(c.fmt, RETRO_PIXEL_FORMAT_XRGB8888);
     CHECK(c.can_state);
     CHECK_INT((int)c.av.geometry.base_width, 160);
@@ -63,6 +66,16 @@ int main(void) {
     CHECK_INT(core_load(&c2, "./testcore.so", rom), 0);
     CHECK_STR(core_option(&c2, "test_colour"), "blue");
     core_unload(&c2);
+
+    /* zipped ROM for a core without zip support: extracted and loaded */
+    char zcmd[2048], zrom[1024];
+    snprintf(zrom, sizeof zrom, "%s/storage/roms/test/game.zip", root);
+    snprintf(zcmd, sizeof zcmd, "cd %s/storage/roms/test && zip -q game.zip game.tst", root);
+    CHECK_INT(system(zcmd), 0);
+    setenv("TMPDIR", root, 1);
+    Core c4 = {.on_video = on_video, .on_audio = on_audio, .on_input = on_input};
+    CHECK_INT(core_load(&c4, "./testcore.so", zrom), 0);
+    core_unload(&c4);
 
     Core c3 = {0};
     CHECK_INT(core_load(&c3, "./missing.so", rom), -1);

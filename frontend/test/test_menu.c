@@ -36,6 +36,15 @@ int main(void) {
     CHECK_INT(m.slot, 8);
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_B), M_CONTINUE);
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_X), M_NONE);
+    /* a failed save/load keeps the menu open with a message until the next key */
+    menu_init(&m, true, 0);
+    CHECK(m.msg == NULL);
+    menu_failed(&m, M_SAVE);
+    CHECK_STR(m.msg, "Speichern fehlgeschlagen");
+    menu_failed(&m, M_LOAD);
+    CHECK_STR(m.msg, "Laden fehlgeschlagen");
+    menu_key(&m, RETRO_DEVICE_ID_JOYPAD_DOWN);
+    CHECK(m.msg == NULL);
     CHECK_STR(menu_label(M_SAVE), "Speichern");
     CHECK_STR(menu_label(M_QUIT), "Beenden");
     TEST_END();

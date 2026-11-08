@@ -1,16 +1,20 @@
 #!/bin/sh
-# One-time move of RetroArch-style saves next to the ROMs into rgarch's folders:
-#   roms/<sys>/X.srm|.rtc        -> saves/<sys>/X.srm|.rtc
-#   roms/<sys>/X.state[N][.png]  -> states/<sys>/X.st<N|0>[.png]
-#   roms/<sys>/X.state.auto      -> states/<sys>/X.auto
+# One-time move of RetroArch-style saves next to the ROMs into rgarch's folders, for the
+# systems rgarch runs (sections in systems.cfg); RetroArch systems keep theirs.
+#   roms/<sys>/**/X.srm|.rtc|.brm|.sav|.ups -> saves/<sys>/X.<ext>
+#   roms/<sys>/**/X.state[N][.png]          -> states/<sys>/X.st<N|0>[.png]
+#   roms/<sys>/**/X.state.auto              -> states/<sys>/X.auto
 # Existing targets are kept (the source stays). Safe to run again. ROOT= prefixes paths.
 R="${ROOT:-}/storage"
+CFG="$R/.config/rgarch/systems.cfg"
 for dir in "$R"/roms/*/; do
   sys=$(basename "$dir")
-  find "$dir" -maxdepth 1 -type f \( -name '*.srm' -o -name '*.rtc' -o -name '*.state*' \) | while IFS= read -r f; do
+  grep -q "^\[$sys\]" "$CFG" 2>/dev/null || continue
+  find "$dir" -type f \( -name '*.srm' -o -name '*.rtc' -o -name '*.brm' -o -name '*.sav' -o -name '*.ups' -o -name '*.state*' \) |
+  while IFS= read -r f; do
     b=$(basename "$f")
     case "$b" in
-      *.srm|*.rtc)        to="$R/saves/$sys/$b" ;;
+      *.srm|*.rtc|*.brm|*.sav|*.ups) to="$R/saves/$sys/$b" ;;
       *.state.auto)       to="$R/states/$sys/${b%.state.auto}.auto" ;;
       *.state.png)        to="$R/states/$sys/${b%.state.png}.st0.png" ;;
       *.state)            to="$R/states/$sys/${b%.state}.st0" ;;

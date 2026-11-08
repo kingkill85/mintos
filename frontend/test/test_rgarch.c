@@ -1,15 +1,18 @@
 // uses:
 // so: frontend/test/testcore.c
-// bin: rgarch-host frontend/main.c frontend/core.c frontend/paths.c frontend/config.c frontend/viewport.c frontend/video.c frontend/audio.c frontend/ratecontrol.c frontend/input.c frontend/inputmap.c frontend/state.c frontend/menu.c common/ui.c
+// bin: rgarch-host frontend/main.c frontend/core.c frontend/paths.c frontend/config.c frontend/viewport.c frontend/video.c frontend/audio.c frontend/ratecontrol.c frontend/input.c frontend/inputmap.c frontend/state.c frontend/menu.c frontend/archive.c common/ui.c
 /* Runs a host build of rgarch with the test core (SDL dummy drivers). */
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <time.h>
 #include "check.h"
 
 static char root[] = "/tmp/rgarch-main-XXXXXX";
+
+static const char *err_timeout = "1", *term_early = NULL;
 
 static pid_t start(const char *rom, const char *extra) {
     pid_t pid = fork();
@@ -18,7 +21,8 @@ static pid_t start(const char *rom, const char *extra) {
         snprintf(core, sizeof core, "%s/testcore.so", getcwd(NULL, 0));
         setenv("RGARCH_ROOT", root, 1);
         setenv("RGARCH_CORE", core, 1);
-        setenv("RGARCH_ERROR_TIMEOUT", "1", 1);
+        setenv("RGARCH_ERROR_TIMEOUT", err_timeout, 1);
+        if (term_early) setenv("RGARCH_TEST_TERM_EARLY", "1", 1);
         if (extra) execl("./rgarch-host", "rgarch", extra, "test", rom, (char *)NULL);
         else execl("./rgarch-host", "rgarch", "test", rom, (char *)NULL);
         _exit(127);
@@ -62,6 +66,27 @@ int main(void) {
     /* missing ROM: error page, then exit 1 (timeout instead of a B press) */
     pid = start("/storage/roms/test/missing.tst", NULL);
     CHECK_INT(wait_exit(pid), 1);
+
+    /* power key on the error page: quits at once instead of waiting for the timeout */
+    err_timeout = "30";
+    pid = start("/storage/roms/test/missing.tst", NULL);
+    usleep(700000);
+    kill(pid, SIGTERM);
+    int t0 = (int)time(NULL);
+    CHECK_INT(wait_exit(pid), 0);
+    CHECK((int)time(NULL) - t0 < 3);
+    err_timeout = "1";
+
+    /* SIGTERM before the first frame of a --resume start keeps the old auto state */
+    snprintf(p, sizeof p, "%s/storage/states/test/Game (USA).auto", root);
+    FILE *af = fopen(p, "wb"); fputs("OLDSTATE", af); fclose(af);
+    term_early = "1";
+    pid = start(rom, "--resume");
+    CHECK_INT(wait_exit(pid), 0);
+    term_early = NULL;
+    char got[16] = "";
+    af = fopen(p, "rb"); if (af) { fread(got, 1, 8, af); fclose(af); }
+    CHECK_STR(got, "OLDSTATE");
 
     /* usage */
     pid = fork();

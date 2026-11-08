@@ -1,5 +1,6 @@
 #include "core.h"
 #include "paths.h"
+#include "archive.h"
 #include <dlfcn.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -235,6 +236,9 @@ int core_load(Core *c, const char *so, const char *rom) {
     path_system(rom, sys, sizeof sys);
     snprintf(sysdir, sizeof sysdir, "%s/storage/roms/bios", root);
     snprintf(savedir, sizeof savedir, "%s/storage/saves/%s", root, sys);
+    char probe[1100];
+    snprintf(probe, sizeof probe, "%s/x", savedir);
+    mkdirs_for(probe);   /* cores write BRAM/FDS saves there themselves */
     snprintf(optfile, sizeof optfile, "%s/storage/.config/retroarch/config/%s/%s.opt", root,
              c->info.library_name, c->info.library_name);
     opt_free(opts, &nopts);
@@ -249,10 +253,12 @@ int core_load(Core *c, const char *so, const char *rom) {
     f.set_input_state(input_cb);
     f.init();
 
-    struct retro_game_info g = {.path = rom};
+    static char loadpath[1024];
+    if (archive_prepare(rom, c->info.valid_extensions, loadpath, sizeof loadpath)) return -1;
+    struct retro_game_info g = {.path = loadpath};
     if (!c->info.need_fullpath) {
-        FILE *fp = fopen(rom, "rb");
-        if (!fp) { rg_log("cannot read %s\n", rom); return -1; }
+        FILE *fp = fopen(loadpath, "rb");
+        if (!fp) { rg_log("cannot read %s\n", loadpath); return -1; }
         fseek(fp, 0, SEEK_END);
         long n = ftell(fp);
         rewind(fp);

@@ -11,7 +11,12 @@ bool menu_on_slot_item(const Menu *m) {
     return m->items[m->sel] == M_SAVE || m->items[m->sel] == M_LOAD;
 }
 
+void menu_failed(Menu *m, MenuAction a) {
+    m->msg = a == M_SAVE ? "Speichern fehlgeschlagen" : "Laden fehlgeschlagen";
+}
+
 MenuAction menu_key(Menu *m, int id) {
+    m->msg = NULL;
     switch (id) {
     case RETRO_DEVICE_ID_JOYPAD_UP: m->sel = (m->sel + m->nitems - 1) % m->nitems; break;
     case RETRO_DEVICE_ID_JOYPAD_DOWN: m->sel = (m->sel + 1) % m->nitems; break;
@@ -88,6 +93,10 @@ void menu_draw(Ui *ui, const Menu *m, const char *title, SDL_Texture *preview) {
     }
     if (menu_on_slot_item(m)) preview_box(ui, m, preview);
 
+    if (m->msg) {
+        ui_text(ui, ui->small, m->msg, PAD + 24 + 2, ui->h - PAD - HINT - 30 + 2, UI_BLACK, ui->w);
+        ui_text(ui, ui->small, m->msg, PAD + 24, ui->h - PAD - HINT - 30, UI_WHITE, ui->w);
+    }
     const char *power[][2] = {{"POWER", "AUS"}};
     ui_hints(ui, PAD, 0, power, 1);
     const char *nav[][2] = {{"B", "ZURÜCK"}, {"A", "OK"}};

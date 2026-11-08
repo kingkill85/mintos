@@ -1,4 +1,4 @@
-// uses: frontend/state.c frontend/core.c frontend/paths.c
+// uses: frontend/state.c frontend/core.c frontend/paths.c frontend/archive.c
 // so: frontend/test/testcore.c
 // libs: $(pkg-config --libs sdl2 SDL2_image)
 #include <string.h>

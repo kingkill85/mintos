@@ -57,7 +57,8 @@ bool retro_unserialize(const void *d, size_t n) { if (n < 4) return false; memcp
 void retro_cheat_reset(void) {}
 void retro_cheat_set(unsigned i, bool e, const char *c) { (void)i; (void)e; (void)c; }
 bool retro_load_game(const struct retro_game_info *g) {
-    (void)g;
+    /* like real cores without zip support: archive bytes are not a ROM */
+    if (g && g->data && g->size >= 2 && !memcmp(g->data, "PK", 2)) return false;
     enum retro_pixel_format f = RETRO_PIXEL_FORMAT_XRGB8888;
     return env(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &f);
 }
