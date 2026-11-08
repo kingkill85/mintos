@@ -42,7 +42,8 @@ static char title[128], msg[128];
 /* Wi-Fi as last reported by mintos-wifi */
 typedef struct { char name[64], type[8]; int bars, known, connected; } Net;
 static Net nets[32];
-static int nnets, wifi_powered = -1, scanned, kb_on, net_sel;
+static int nnets, wifi_powered = -1, wifi_ready = 1, scanned, kb_on, net_sel;
+static Uint32 last_ws;   /* last Wi-Fi status: polled while the chip is still coming up */
 static char wifi_ssid[64], wifi_state[24];
 static Kb kb;
 
@@ -115,8 +116,8 @@ static void build(void) {
         int v = vol_get();
         it->bar = v < 0 ? -1 : (v + 5) / 10;
         it = add(I_WIFI, "WLAN");
-        snprintf(it->value, sizeof it->value, "%s", wifi_powered == 0 ? "Aus" : *wifi_ssid ? wifi_ssid
-                 : wifi_powered < 0 ? "" : "Nicht verbunden");
+        snprintf(it->value, sizeof it->value, "%s", !wifi_ready ? "Startet ..." : wifi_powered == 0 ? "Aus"
+                 : *wifi_ssid ? wifi_ssid : wifi_powered < 0 ? "" : "Nicht verbunden");
         it = add(I_BT, "Bluetooth");
         const char *bc = NULL;
         for (int i = 0; i < ndevs; i++) if (devs[i].connected) { bc = devs[i].name; break; }
@@ -129,8 +130,9 @@ static void build(void) {
         add(I_POWEROFF, "Ausschalten");
     } else if (page == P_WIFI) {
         Item *it = add(I_WIFI_POWER, "WLAN");
-        snprintf(it->value, sizeof it->value, "%s", wifi_powered ? "An" : "Aus");
-        if (wifi_powered) {
+        snprintf(it->value, sizeof it->value, "%s", !wifi_ready ? "Startet ..." : wifi_powered ? "An" : "Aus");
+        if (!wifi_ready) add(I_TEXT, "WLAN-Chip startet noch ...");
+        else if (wifi_powered) {
             for (int i = 0; i < nnets; i++) {
                 it = add(I_NET, nets[i].name);
                 it->arg = i;
@@ -263,6 +265,8 @@ static void parse_nets(const char *out) {
 static void parse_status(const char *out) {
     const char *p;
     wifi_powered = (p = strstr(out, "powered=")) ? atoi(p + 8) : 0;
+    wifi_ready = (p = strstr(out, "device=")) ? atoi(p + 7) : 1;
+    last_ws = SDL_GetTicks();
     wifi_ssid[0] = wifi_state[0] = 0;
     if ((p = strstr(out, "ssid="))) sscanf(p + 5, "%63[^\n]", wifi_ssid);
     if ((p = strstr(out, "state="))) sscanf(p + 6, "%23[^\n]", wifi_state);
@@ -278,6 +282,11 @@ static void set_msg(const char *out, const char *fallback) {
 int settings_poll(void) {
     int kind, rc;
     const char *out;
+    if (!wifi_ready && (page == P_MAIN || page == P_WIFI) && SDL_GetTicks() - last_ws > 3000 && !need_ws) {
+        need_ws = need_wl = need_wscan = 1;
+        last_ws = SDL_GetTicks();
+        kick();
+    }
     if (!job_take(&kind, &rc, &out)) return 0;
     switch (kind) {
     case J_STATUS: parse_status(out); break;
@@ -392,6 +401,7 @@ static void change(Item *it, int d) {
         ndevs = 0; bt_scanned = 0; need_bscan = bt_powered;
         break;
     case I_WIFI_POWER:
+        if (!wifi_ready) break;   /* no chip yet: nothing to switch */
         kv_set(SETTINGS_FILE, "wifi", wifi_powered ? "off" : NULL);
         wifi_job(J_POWER, wifi_powered ? "power off" : "power on", NULL);
         wifi_powered = !wifi_powered;

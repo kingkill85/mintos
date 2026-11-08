@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Wi-Fi for the MintOS settings, over iwd's D-Bus API (busctl).
-  mintos-wifi status            powered=0|1, state=..., ssid=...
+  mintos-wifi status            device=0|1 (0: chip not there yet), powered=0|1, state=..., ssid=...
   mintos-wifi list [--cached]   scan (unless --cached), then "name<TAB>type<TAB>bars 0-4<TAB>known<TAB>connected" per network
   mintos-wifi connect <ssid>    passphrase (if needed) on stdin; exit 0 when connected
   mintos-wifi forget <ssid>
@@ -63,6 +63,10 @@ def write_psk(d, name, passphrase):
         f.write("[Security]\nPassphrase=%s\n" % passphrase)
     os.rename(p + ".tmp", p)
     return p
+
+
+def status_text(st):
+    return "device=%d\npowered=%d\nstate=%s\nssid=%s" % (st["device"] is not None, st["powered"], st["state"], st["ssid"])
 
 
 def state():
@@ -148,8 +152,11 @@ def cmd_power(on):
 def main(argv):
     try:
         if argv[:1] == ["status"]:
-            st = state()
-            print("powered=%d\nstate=%s\nssid=%s" % (st["powered"], st["state"], st["ssid"]))
+            try:
+                st = state()
+            except RuntimeError:   # iwd not running (yet)
+                st = parse({})
+            print(status_text(st))
             return 0
         if argv[:1] == ["list"]:
             return cmd_list(cached="--cached" in argv)
