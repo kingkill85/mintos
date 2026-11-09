@@ -185,10 +185,12 @@ void video_draw(const SystemCfg *s, float aspect, bool dim) {
     if (!ren) return;
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     SDL_RenderClear(ren);
+    SDL_Rect pic = {0, 0, 0, 0};   /* the game picture on screen, for the overlay opacity */
     if (frame) {
         Rect r = viewport(s, sw, sh, fw, fh, aspect);
         SDL_Rect dst = {r.x, r.y, r.w, r.h};
         SDL_FRect f = picture_rect(s, &dst);
+        pic = (SDL_Rect){(int)f.x, (int)f.y, (int)f.w, (int)f.h};
         /* a drawn frame needs a border of at least 8 px somewhere */
         const BorderStyle *bs = config_border(s->border);
         if (bs && f.x < 8 && f.y < 8) bs = NULL;   /* no room for a frame */
@@ -206,8 +208,29 @@ void video_draw(const SystemCfg *s, float aspect, bool dim) {
          * is 640x479, stretched to 480 one row doubled and its LCD grid slipped off the game */
         int ow, oh;
         SDL_QueryTexture(overlay, NULL, NULL, &ow, &oh);
+        int one = abs(ow - sw) <= 2 && abs(oh - sh) <= 2;
         SDL_Rect o = {0, 0, ow, oh};
-        SDL_RenderCopy(ren, overlay, NULL, abs(ow - sw) <= 2 && abs(oh - sh) <= 2 ? &o : NULL);
+        SDL_SetTextureAlphaMod(overlay, 255);
+        int weak = s->opacity > 0 && s->opacity < 100;
+        if ((!weak && !s->cut) || pic.w <= 0) {
+            SDL_RenderCopy(ren, overlay, NULL, one ? &o : NULL);
+        } else {
+            /* overlay_opacity weakens only the LCD grid over the picture; the frame around it
+             * stays solid (a see-through frame showed its light inner edge as a grey ring) */
+            int W = one ? ow : sw, H = one ? oh : sh, c = s->cut;   /* overlay_cut: ring left out */
+            SDL_Rect in = {pic.x - c, pic.y - c, pic.w + 2 * c, pic.h + 2 * c};
+            SDL_Rect part[5] = {
+                {0, 0, W, in.y}, {0, in.y + in.h, W, H - in.y - in.h},
+                {0, in.y, in.x, in.h}, {in.x + in.w, in.y, W - in.x - in.w, in.h}, pic};
+            for (int i = 0; i < 5; i++) {
+                SDL_Rect d = part[i], src = d;
+                if (d.w <= 0 || d.h <= 0) continue;
+                if (!one) src = (SDL_Rect){d.x * ow / sw, d.y * oh / sh, d.w * ow / sw, d.h * oh / sh};
+                if (i == 4) SDL_SetTextureAlphaMod(overlay, weak ? s->opacity * 255 / 100 : 255);
+                SDL_RenderCopy(ren, overlay, &src, &d);
+            }
+            SDL_SetTextureAlphaMod(overlay, 255);
+        }
     }
     if (dim) {
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 170);

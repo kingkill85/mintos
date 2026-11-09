@@ -23,6 +23,12 @@ static void apply(SystemCfg *c, const char *key, const char *val) {
             c->scale = SCALE_CUSTOM;
         else
             c->scale = !strcmp(val, "aspect") ? SCALE_ASPECT : !strcmp(val, "full") ? SCALE_FULL : SCALE_INTEGER;
+    } else if (!strcmp(key, "overlay_cut")) {
+        int v = atoi(val);
+        c->cut = v > 0 && v < 32 ? v : 0;
+    } else if (!strcmp(key, "overlay_opacity")) {
+        int v = atoi(val);
+        c->opacity = v > 0 && v <= 100 ? v : 0;
     } else if (!strcmp(key, "crt")) {
         c->crt = !strcmp(val, "yes");
     } else if (!strcmp(key, "overlay")) {

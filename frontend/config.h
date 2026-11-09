@@ -10,6 +10,8 @@ typedef struct {
     int cx, cy, cw, ch;   /* SCALE_CUSTOM rectangle on the 640x480 screen */
     Filter filter;
     char overlay[256];    /* absolute PNG path, "" for none */
+    int opacity;          /* overlay_opacity in percent (RetroArch input_overlay_opacity); 0 = 100 */
+    int cut;              /* overlay_cut: px of the overlay left out around the picture (a frame edge made for another palette) */
     int crt;              /* systems.cfg crt = yes: TV/arcade, Scanlines allowed */
     int border;           /* drawn frame around the picture: 0 none, else 1 + index in config_border() */
 } SystemCfg;
