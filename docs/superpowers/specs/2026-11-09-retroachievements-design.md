@@ -142,10 +142,10 @@ Neuer Punkt „RetroAchievements“:
 - Gerät (erst nach OK): Anmeldung, Abgleich, ein Spiel mit einem leichten ersten Erfolg
   online und mit WLAN aus, danach Abgleich und Prüfung auf der Website.
 
-## Offen / vor dem Bauen zu prüfen
+## Geprüft (Gerät, 2026-11-09)
 
-- Welche CD-Formate auf dem Gerät liegen (CHD, cue/bin, …) und ob `rc_hash` sie lesen kann
-  (CHD braucht eigene Lese-Funktionen, sonst PS1/CD-Systeme ohne Erfolge).
-- Ob libcurl auf dem Gerät schon installiert ist (sonst `libcurl4` in `os/chroot-install.sh`).
-- Arcade (fbneo): Erkennung über den Dateinamen, Tabelle prüfen.
-- Dauer des ersten Abgleichs bei allen ROMs (Messung auf dem Gerät).
+- libcurl: `libcurl3t64-gnutls` (libcurl-gnutls.so.4) ist installiert; das Tool linkt dagegen.
+- ROM-Formate: viele `.zip` (megadrive, gba, snes, gamegear), PS1 als cue/bin, kein CHD.
+  Zips werden vor dem Hashen über `archive_prepare` (frontend/archive.c) entpackt.
+- Etwa 30 ROMs: der erste Abgleich ist kurz.
+- Arcade (fbneo): Erkennung über den Dateinamen (rc_hash macht das für RC_CONSOLE_ARCADE).
