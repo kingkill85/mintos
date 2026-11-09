@@ -170,10 +170,10 @@ static void shadow_text(Ui *ui, const char *s, int x, int cy, SDL_Color c, int m
 
 /* geometry from MinUI's menu (minui-menu-gbc.png at 640x480) */
 #define ITEM_Y (PAD + HINT + 16)    /* first item's top, as in the launcher list */
-/* row step: full pills up to 5 items, 52 for 6, 34 for 7-8 (with Optionen/Erfolge/Disc)
+/* row step: full pills up to 5 items, 52 for 6, 36 for 7-8 with the pill as tall as the step
  * so the last pill stays above the message line (text centre y = h-PAD-HINT-30) */
-static int menu_item_step(const Menu *m) { return m->nitems > 6 ? 34 : m->nitems > 5 ? 52 : PILL; }
-int menu_item_y(const Menu *m, int i) { int s = menu_item_step(m); return ITEM_Y + i * s + (s - PILL) / 2; }
+static int menu_item_step(const Menu *m) { return m->nitems > 6 ? 36 : m->nitems > 5 ? 52 : PILL; }
+int menu_item_y(const Menu *m, int i) { int s = menu_item_step(m); return ITEM_Y + i * s + (s - (m->nitems > 6 ? s : PILL)) / 2; }
 #define PV_X 284
 #define PV_Y 100
 #define PV_W 336
@@ -265,12 +265,12 @@ void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     } else {
         for (int i = 0; i < m->nitems; i++) {
             const char *s = menu_item_text(m, i);
-            int y = menu_item_y(m, i);
+            int y = menu_item_y(m, i), ph = m->nitems > 6 ? menu_item_step(m) : PILL;
             if (i == m->sel) {
-                ui_pill(ui, PAD, y, ui_text_w(ui->big, s) + 48, PILL, UI_WHITE);
-                ui_text(ui, ui->big, s, PAD + 24, y + PILL / 2, UI_BLACK, ui->w);
+                ui_pill(ui, PAD, y, ui_text_w(ui->big, s) + 48, ph, UI_WHITE);
+                ui_text(ui, ui->big, s, PAD + 24, y + ph / 2, UI_BLACK, ui->w);
             } else {
-                shadow_text(ui, s, PAD + 24, y + PILL / 2, UI_WHITE, ui->w);
+                shadow_text(ui, s, PAD + 24, y + ph / 2, UI_WHITE, ui->w);
             }
         }
         if (menu_on_slot_item(m)) preview_box(ui, m, preview);

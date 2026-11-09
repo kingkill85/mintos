@@ -123,12 +123,10 @@ int main(void) {
             Menu mm;
             menu_init(&mm, true, 0, false);
             mm.nitems = n;
-            int step = n > 6 ? 34 : n > 5 ? 52 : PILL;
-            {
-                for (int i = 0; i < n; i++) CHECK_INT(menu_item_y(&mm, i), PAD + HINT + 16 + i * step + (step - PILL) / 2);
-            }
-            if (n >= 7) CHECK(menu_item_y(&mm, n - 1) + PILL <= msg_top);   /* 5-6 items: unchanged */
-            CHECK(menu_item_y(&mm, n - 1) + PILL <= hint_top);
+            int step = n > 6 ? 36 : n > 5 ? 52 : PILL, ph = n > 6 ? step : PILL;
+            for (int i = 0; i < n; i++) CHECK_INT(menu_item_y(&mm, i), PAD + HINT + 16 + i * step + (step - ph) / 2);
+            if (n >= 7) CHECK(menu_item_y(&mm, n - 1) + ph <= msg_top);   /* 5-6 items: unchanged */
+            CHECK(menu_item_y(&mm, n - 1) + ph <= hint_top);
             CHECK(menu_item_y(&mm, 0) >= PAD + HINT);
         }
     }
