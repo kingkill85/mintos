@@ -9,8 +9,9 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
 - `launcher/rglauncher.c`: the game list (C, SDL2 KMSDRM, SDL2_ttf, 640×480). It lists
   `/storage/roms/<system>`; D-pad moves, L/R or left/right page, **A** starts, **B** goes back.
   The top bar shows where you are ("MintOS", the system, "Einstellungen › WLAN") and the position.
+  After a game it comes back to where the game was started; after power-on it starts at the top of the root list.
   Starting a game replaces the process with `launch.sh`; systemd restarts the list afterwards.
-- **Einstellungen** (last root entry, `launcher/settings.c`): brightness, volume, WLAN (networks,
+- **Einstellungen** (F key anywhere in the list, F or B closes, `launcher/settings.c`): brightness, volume, WLAN (networks,
   password via on-screen keyboard `launcher/keyboard.c`), Bluetooth (pair headphones/controllers),
   Spiel-Optionen (per system Bild/Filter/Rahmen in `rgarch/user.cfg` over `systems.cfg`), screen-off
   timer, info, reboot/power-off. Slow commands (`mintos-wifi`, `mintos-bt`) run as background jobs

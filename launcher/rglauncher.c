@@ -71,7 +71,7 @@ static const Sys SYSTEMS[] = {
 #define NSYS (int)(sizeof SYSTEMS / sizeof *SYSTEMS)
 
 /* ---------- entries ---------- */
-enum { K_GAME, K_SYSTEM, K_RECENT, K_SETTINGS };
+enum { K_GAME, K_SYSTEM, K_RECENT };
 typedef struct { int kind, sys; char label[128]; char path[512]; } Entry;
 
 static Entry games[MAXE];   /* current game list */
@@ -209,9 +209,6 @@ static void build_root(void) {
     for (int i = 0; i < nroot; i++)
         if (root[i].kind == K_SYSTEM) { dirs[ns] = SYSTEMS[root[i].sys].dir; names[ns] = SYSTEMS[root[i].sys].name; ns++; }
     settings_set_systems(dirs, names, ns);
-    root[nroot].kind = K_SETTINGS; root[nroot].sys = -1;
-    snprintf(root[nroot].label, sizeof root[nroot].label, "Einstellungen");
-    nroot++;
 }
 
 /* ---------- drawing ---------- */
@@ -223,7 +220,8 @@ static int sel, top;
 static int level;          /* 0 = root, 1 = game list */
 static int root_sel;
 static char title[64];
-static int in_settings;   /* level 1 shows the settings pages */
+static int in_settings;   /* the F key shows the settings pages over the list */
+static int saved_level, saved_sel, saved_top;   /* where F was pressed */
 
 /* header: where we are (dark pill, top left), position "3/41", battery */
 static void draw_header(const char *where, int pos, int n) {
@@ -310,7 +308,10 @@ static void close_video(void) {
     ui.ren = NULL; win = NULL;
 }
 
-/* remember where we were so we come back to the same place after a game */
+/* remember where we were so we come back to the same place after a game; the marker in
+ * /run (empty after every boot) tells a return from a game from a fresh start, which
+ * begins at the top of the root list */
+#define FROM_GAME "/run/rglauncher-from-game"
 static void save_state(void) {
     FILE *f = fopen(CONF "/state", "w");
     if (!f) return;
@@ -322,10 +323,11 @@ static void open_entry(int i);
 
 static void load_state(void) {
     int lv = 0, rs = 0, gs = 0;
+    if (unlink(FROM_GAME)) { sel = 0; return; }   /* fresh start: root list, top */
     FILE *f = fopen(CONF "/state", "r");
     if (f) { if (fscanf(f, "%d %d %d", &lv, &rs, &gs) != 3) lv = rs = gs = 0; fclose(f); }
     sel = rs < nroot ? rs : 0;
-    if (lv == 1 && root[sel].kind != K_SETTINGS) {
+    if (lv == 1 && nroot) {
         open_entry(sel);
         sel = gs < ngames ? gs : 0;
     }
@@ -335,7 +337,6 @@ static void open_entry(int i) {
     Entry *e = &root[i];
     root_sel = i;
     level = 1;
-    if (e->kind == K_SETTINGS) { in_settings = 1; settings_open(); return; }
     if (e->kind == K_RECENT) { load_recent(); snprintf(title, sizeof title, "Zuletzt gespielt"); }
     else { load_system(e->sys); snprintf(title, sizeof title, "%s", e->label); }
     root_sel = i;
@@ -350,6 +351,8 @@ static void launch(Entry *g) {
     add_recent(g);
     if (level && root[root_sel].kind == K_RECENT) sel = 0;  /* the game is now first in the list */
     if (win) save_state();  /* not on resume at boot: the list was never loaded */
+    int m = open(FROM_GAME, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (m >= 0) close(m);
     close_video();
     int fd = open("/var/log/rglauncher-game.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
@@ -440,10 +443,23 @@ int main(void) {
                     : press_a ? NAV_A : press_b ? NAV_B : btn == SDL_CONTROLLER_BUTTON_X ? NAV_X
                     : btn == SDL_CONTROLLER_BUTTON_Y ? NAV_Y : btn == SDL_CONTROLLER_BUTTON_START ? NAV_START
                     : btn == SDL_CONTROLLER_BUTTON_BACK ? NAV_SELECT : -1;
+            /* F (SDL "guide") opens the settings from anywhere in the list and closes them again */
+            int leave = 0;
+            if (btn == SDL_CONTROLLER_BUTTON_GUIDE) {
+                if (!in_settings) {
+                    saved_level = level; saved_sel = sel; saved_top = top;
+                    in_settings = 1; settings_open();
+                    continue;
+                }
+                leave = 1;
+            }
             if (in_settings) {
-                if (nav >= 0 && settings_key(nav)) {
-                    in_settings = 0; level = 0; build_root();
-                    sel = root_sel < nroot ? root_sel : 0; top = 0;
+                if (leave || (nav >= 0 && settings_key(nav))) {
+                    in_settings = 0; build_root();
+                    level = saved_level; sel = saved_sel; top = saved_top;
+                    int n = level ? ngames : nroot;
+                    if (sel >= n) sel = n ? n - 1 : 0;
+                    if (!level && root_sel >= nroot) root_sel = 0;
                 }
                 if (nav >= NAV_UP && nav <= NAV_RIGHT) { held = btn; held_since = last_rep = SDL_GetTicks(); }
                 continue;
