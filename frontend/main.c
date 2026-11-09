@@ -163,8 +163,9 @@ static int error_page(void) {
     }
 }
 
+#define CHEEVO_MAX 512   /* more achievements than any set has */
 /* the menu; returns false when the game should end */
-static bool run_menu(int *slot) {
+static bool run_menu(int *slot, bool cheevos_on) {
     Menu m;
     menu_init(&m, core.can_state || kstates, *slot, core.keyboard != NULL && !core.can_state);
     menu_set_discs(&m, core_disc_count(&core), core_disc_index(&core));
@@ -177,6 +178,8 @@ static bool run_menu(int *slot) {
                           gameopt_get(u, sysname, GO_FRAME), b > 0 ? b : 5};
         menu_set_options(&m, gameopt_has_frame(s, sysname), vals);
     }
+    menu_set_cheevos(&m, cheevos_on);
+    CheevoItem *clist = NULL;
     audio_pause(true);
     input_clear();
     SDL_Texture *pv = NULL;
@@ -215,6 +218,12 @@ static bool run_menu(int *slot) {
                 open = false;
                 break;
             case M_OPTION: apply_option(&m); break;
+            case M_CHEEVOS: {
+                if (!clist) clist = malloc(sizeof *clist * CHEEVO_MAX);
+                int n = clist ? cheevos_list(clist, CHEEVO_MAX) : 0;
+                menu_set_cheevo_list(&m, clist, n);
+                break;
+            }
             case M_RESET:
                 if (scumm_resume[0]) {
                     unlink(scumm_resume);
@@ -242,6 +251,7 @@ static bool run_menu(int *slot) {
         video_flip();
     }
     if (pv) SDL_DestroyTexture(pv);
+    free(clist);
     *slot = m.slot;
     input_clear();
     audio_pause(false);
@@ -295,14 +305,14 @@ int main(int argc, char **argv) {
     } else scumm_resume[0] = 0;
     audio_open(core.av.timing.sample_rate);
     state_sram_load(&core, rom);
-    cheevos_start(&core, system, rom);   /* from the synced files only, never the network */
+    bool cheevos_on = cheevos_start(&core, system, rom);   /* from the synced files only, never the network */
 
     int slot = 0;
     Uint32 last_sram = SDL_GetTicks();
     bool first = true, ran = false;   /* ran: the game ran (and a resume, if any, loaded) */
     if (getenv("RGARCH_TEST_TERM_EARLY")) raise(SIGTERM);   /* test: power key during start-up */
     while (!quit_signal) {
-        if (input_poll() && !run_menu(&slot)) break;
+        if (input_poll() && !run_menu(&slot, cheevos_on)) break;
         Uint32 t_a = SDL_GetTicks();
         frame++;
         if (pending.code && core.keyboard) {

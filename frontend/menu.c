@@ -1,6 +1,7 @@
 #include "menu.h"
 #include "gameopts.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
@@ -54,8 +55,46 @@ static MenuAction opt_key(Menu *m, int id) {
     return M_NONE;
 }
 
+void menu_set_cheevos(Menu *m, bool on) {
+    if (!on) return;
+    m->items[m->nitems] = m->items[m->nitems - 1];   /* before Beenden */
+    m->items[m->nitems - 1] = M_CHEEVOS;
+    m->nitems++;
+}
+
+void menu_set_cheevo_list(Menu *m, CheevoItem *l, int n) {
+    /* stable: unlocked first, each group in its original order */
+    CheevoItem *t = n > 0 ? malloc(sizeof *t * n) : NULL;
+    int u = 0;
+    if (t) {
+        for (int i = 0; i < n; i++) if (l[i].unlocked) t[u++] = l[i];
+        int k = u;
+        for (int i = 0; i < n; i++) if (!l[i].unlocked) t[k++] = l[i];
+        memcpy(l, t, sizeof *t * n);
+        free(t);
+    } else n = 0;
+    m->cl = l; m->ncl = n; m->nunlocked = u; m->csel = 0; m->cpage = n > 0;
+}
+
+const char *menu_cheevo_title(const Menu *m, char *buf, size_t n) {
+    snprintf(buf, n, "Erfolge %d/%d", m->nunlocked, m->ncl);
+    return buf;
+}
+
+static MenuAction cheevo_key(Menu *m, int id) {
+    int last = m->ncl - 1;
+    switch (id) {
+    case RETRO_DEVICE_ID_JOYPAD_UP: m->csel = (m->csel + m->ncl - 1) % m->ncl; break;
+    case RETRO_DEVICE_ID_JOYPAD_DOWN: m->csel = (m->csel + 1) % m->ncl; break;
+    case RETRO_DEVICE_ID_JOYPAD_L: m->csel = m->csel - CHEEVO_ROWS < 0 ? 0 : m->csel - CHEEVO_ROWS; break;
+    case RETRO_DEVICE_ID_JOYPAD_R: m->csel = m->csel + CHEEVO_ROWS > last ? last : m->csel + CHEEVO_ROWS; break;
+    case RETRO_DEVICE_ID_JOYPAD_B: m->cpage = false; break;
+    }
+    return M_NONE;
+}
+
 bool menu_on_slot_item(const Menu *m) {
-    if (m->page) return false;
+    if (m->page || m->cpage) return false;
     return m->items[m->sel] == M_SAVE || m->items[m->sel] == M_LOAD;
 }
 
@@ -90,12 +129,14 @@ MenuAction menu_key(Menu *m, int id) {
     bool armed = m->armed;
     m->armed = false;
     if (m->page) return opt_key(m, id);
+    if (m->cpage) return cheevo_key(m, id);
     if (id == RETRO_DEVICE_ID_JOYPAD_A && m->items[m->sel] == M_RESET && !armed) {
         m->armed = true;
         m->msg = "Nochmal A: Spiel neu starten";
         return M_NONE;
     }
     if (id == RETRO_DEVICE_ID_JOYPAD_A && m->items[m->sel] == M_OPTIONS) { m->page = true; m->osel = 0; return M_NONE; }
+    if (id == RETRO_DEVICE_ID_JOYPAD_A && m->items[m->sel] == M_CHEEVOS) return M_CHEEVOS;
     switch (id) {
     case RETRO_DEVICE_ID_JOYPAD_UP: m->sel = (m->sel + m->nitems - 1) % m->nitems; break;
     case RETRO_DEVICE_ID_JOYPAD_DOWN: m->sel = (m->sel + 1) % m->nitems; break;
@@ -114,6 +155,7 @@ const char *menu_label(MenuAction a) {
     case M_LOAD: return "Laden";
     case M_GAMEMENU: return "ScummVM-Menü";
     case M_OPTIONS: return "Optionen";
+    case M_CHEEVOS: return "Erfolge";
     case M_RESET: return "Neustart";
     case M_QUIT: return "Beenden";
     default: return "";
@@ -176,14 +218,45 @@ static void draw_options(Ui *ui, Menu *m) {
     }
 }
 
+/* "+"/"·" (the fonts have no check mark), title left, points right; the description of the
+ * selected row sits on the bottom line */
+static void draw_cheevos(Ui *ui, Menu *m) {
+    int step = 52, first = m->csel / CHEEVO_ROWS * CHEEVO_ROWS;
+    for (int r = 0; r < CHEEVO_ROWS && first + r < m->ncl; r++) {
+        const CheevoItem *c = &m->cl[first + r];
+        int i = first + r, y = ITEM_Y + r * step + (step - PILL) / 2, cy = y + PILL / 2, on = i == m->csel;
+        char pts[16], row[96];
+        snprintf(pts, sizeof pts, "%u", c->points);
+        snprintf(row, sizeof row, "%s %s", c->unlocked ? "+" : "\xC2\xB7", c->title);
+        int pw = ui_text_w(ui->small, pts), right = ui->w - PAD - 24, maxw = right - pw - 16 - (PAD + 24);
+        if (on) {
+            ui_pill(ui, PAD, y, ui->w - 2 * PAD, PILL, UI_WHITE);
+            ui_text(ui, ui->big, row, PAD + 24, cy, UI_BLACK, maxw);
+            ui_text(ui, ui->small, pts, right - pw, cy, UI_BLACK, pw);
+        } else {
+            shadow_text(ui, row, PAD + 24, cy, c->unlocked ? UI_WHITE : UI_GRAY, maxw);
+            ui_text(ui, ui->small, pts, right - pw + 2, cy + 2, UI_BLACK, pw);
+            ui_text(ui, ui->small, pts, right - pw, cy, UI_WHITE, pw);
+        }
+    }
+    const char *d = m->cl[m->csel].desc;
+    int dy = ui->h - PAD - HINT - 30;
+    ui_text(ui, ui->small, d, PAD + 24 + 2, dy + 2, UI_BLACK, ui->w - 2 * PAD - 48);
+    ui_text(ui, ui->small, d, PAD + 24, dy, UI_WHITE, ui->w - 2 * PAD - 48);
+}
+
 void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     /* title pill, battery */
     char where[300];
-    snprintf(where, sizeof where, m->page ? "%s › Optionen" : "%s", title);
+    char ct[48];
+    if (m->cpage) snprintf(where, sizeof where, "%s › %s", title, menu_cheevo_title(m, ct, sizeof ct));
+    else snprintf(where, sizeof where, m->page ? "%s › Optionen" : "%s", title);
     int right = ui_status(ui);
     ui_title(ui, where, right - 14 - PAD);
 
-    if (m->page) {
+    if (m->cpage) {
+        draw_cheevos(ui, m);
+    } else if (m->page) {
         draw_options(ui, m);
     } else {
         /* six items (with Disc wechseln and Optionen) only fit with tighter rows */
@@ -208,5 +281,5 @@ void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     const char *power[][2] = {{"POWER", "AUS"}};
     ui_hints(ui, PAD, 0, power, 1);
     const char *nav[][2] = {{"B", "ZURÜCK"}, {"A", "OK"}};
-    ui_hints(ui, 0, ui->w - PAD, nav, m->page ? 1 : 2);
+    ui_hints(ui, 0, ui->w - PAD, nav, m->page || m->cpage ? 1 : 2);
 }

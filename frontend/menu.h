@@ -1,10 +1,12 @@
 /* MinUI in-game menu: Weiter / Speichern / Laden / Neustart / Beenden, 9 slots with preview. */
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include "ui.h"
 #include "libretro.h"
+#include "cheevos.h"
 
-typedef enum { M_NONE, M_CONTINUE, M_SAVE, M_LOAD, M_GAMEMENU, M_DISC, M_OPTIONS, M_RESET, M_QUIT, M_OPTION } MenuAction;
+typedef enum { M_NONE, M_CONTINUE, M_SAVE, M_LOAD, M_GAMEMENU, M_DISC, M_OPTIONS, M_CHEEVOS, M_RESET, M_QUIT, M_OPTION } MenuAction;
 /* options page lines; MO_SCALE..MO_FRAME are GameOpt values */
 typedef enum { MO_SCALE, MO_FILTER, MO_FRAME, MO_BRIGHT, MO_N } MenuOpt;
 
@@ -18,6 +20,9 @@ typedef struct {
     char text[48];
     bool page;                 /* options page open */
     int osel, nopts, opts[MO_N], val[MO_N];
+    bool cpage;                /* achievements list open */
+    CheevoItem *cl;            /* the caller's array (sorted in place), not owned */
+    int ncl, nunlocked, csel;
     MenuOpt changed;           /* after M_OPTION: the option whose val[] changed */
 } Menu;
 
@@ -35,6 +40,13 @@ const char *menu_item_text(Menu *m, int i);   /* label of item i as shown */  /*
 /* adds "Optionen" before Beenden: vals = current choice per MenuOpt (brightness 1..10) */
 void menu_set_options(Menu *m, bool has_frame, const int vals[MO_N]);
 const char *menu_opt_value(Menu *m, int i);   /* text of options line i */
+/* adds "Erfolge" before Beenden; A on it returns M_CHEEVOS */
+void menu_set_cheevos(Menu *m, bool on);
+/* the list for M_CHEEVOS: sorts it in place (unlocked first, order kept), keeps the pointer
+ * until the menu closes and opens the page */
+void menu_set_cheevo_list(Menu *m, CheevoItem *list, int n);
+#define CHEEVO_ROWS 5          /* rows per page; L/R jump by this */
+const char *menu_cheevo_title(const Menu *m, char *buf, size_t n);   /* "Erfolge x/y" */
 bool menu_on_slot_item(const Menu *m);    /* Speichern or Laden selected */
 /* draws over whatever is on screen (the dimmed game); preview NULL = empty slot */
 void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview);

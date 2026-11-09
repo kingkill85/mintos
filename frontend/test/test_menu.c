@@ -1,11 +1,13 @@
 // uses: frontend/menu.c frontend/gameopts.c frontend/config.c common/ui.c
 // libs: $(pkg-config --libs sdl2 SDL2_ttf SDL2_image)
+#include <stdio.h>
 #include <string.h>
 #include "check.h"
 #include "menu.h"
 
 int main(void) {
     Menu m;
+    char tbuf[64];
     menu_init(&m, true, 0, false);
     CHECK_INT(m.nitems, 5);
     CHECK_INT(m.items[0], M_CONTINUE); CHECK_INT(m.items[1], M_SAVE);
@@ -78,5 +80,41 @@ int main(void) {
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_NONE);
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_B), M_CONTINUE);
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_NONE);   /* B disarmed it */
+    /* Erfolge: before Beenden, only when asked for */
+    menu_init(&m, true, 0, false);
+    menu_set_cheevos(&m, false);
+    CHECK_INT(m.nitems, 5);
+    menu_set_cheevos(&m, true);
+    CHECK_INT(m.nitems, 6);
+    CHECK_INT(m.items[4], M_CHEEVOS); CHECK_INT(m.items[5], M_QUIT);
+    CHECK_STR(menu_label(M_CHEEVOS), "Erfolge");
+    m.sel = 4;
+    CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_CHEEVOS);
+    {
+        CheevoItem it[12] = {0};
+        for (int i = 0; i < 12; i++) { snprintf(it[i].title, sizeof it[i].title, "T%d", i); it[i].points = i; it[i].unlocked = i % 4 == 1; }
+        menu_set_cheevo_list(&m, it, 12);                 /* opens the page; unlocked first, order kept */
+        CHECK(m.cpage);
+        CHECK_INT(m.nunlocked, 3);
+        CHECK_STR(it[0].title, "T1"); CHECK_STR(it[1].title, "T5"); CHECK_STR(it[2].title, "T9");
+        CHECK_STR(it[3].title, "T0"); CHECK_STR(it[4].title, "T2"); CHECK_STR(it[11].title, "T11");
+        CHECK_INT(m.csel, 0);
+        CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_DOWN), M_NONE);
+        CHECK_INT(m.csel, 1);
+        menu_key(&m, RETRO_DEVICE_ID_JOYPAD_UP); menu_key(&m, RETRO_DEVICE_ID_JOYPAD_UP);
+        CHECK_INT(m.csel, 11);                            /* wraps */
+        menu_key(&m, RETRO_DEVICE_ID_JOYPAD_DOWN);
+        menu_key(&m, RETRO_DEVICE_ID_JOYPAD_R);           /* next page */
+        CHECK_INT(m.csel, CHEEVO_ROWS);
+        menu_key(&m, RETRO_DEVICE_ID_JOYPAD_R); menu_key(&m, RETRO_DEVICE_ID_JOYPAD_R);
+        CHECK_INT(m.csel, 11);                            /* clamps at the end */
+        menu_key(&m, RETRO_DEVICE_ID_JOYPAD_L);
+        CHECK_INT(m.csel, 11 - CHEEVO_ROWS);
+        CHECK_STR(menu_cheevo_title(&m, tbuf, sizeof tbuf), "Erfolge 3/12");
+        CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_NONE);
+        CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_B), M_NONE);   /* back to the menu, not out of it */
+        CHECK(!m.cpage);
+        CHECK_INT(m.sel, 4);                              /* Erfolge still selected */
+    }
     TEST_END();
 }
