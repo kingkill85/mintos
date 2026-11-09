@@ -7,7 +7,8 @@
 
 static SDL_Window *win;
 static SDL_Renderer *ren;
-static SDL_Texture *frame, *sharp, *overlay;
+static SDL_Texture *frame, *sharp, *overlay, *scan;   /* scan: scanline mask */
+static int scan_h;
 static int fw, fh, ffmt = -1, sharp_w, sharp_h, sw, sh;
 static char overlay_path[256];
 
@@ -29,7 +30,9 @@ void video_close(void) {
     if (frame) SDL_DestroyTexture(frame);
     if (sharp) SDL_DestroyTexture(sharp);
     if (overlay) SDL_DestroyTexture(overlay);
-    frame = sharp = overlay = NULL;
+    if (scan) SDL_DestroyTexture(scan);
+    frame = sharp = overlay = scan = NULL;
+    scan_h = 0;
     if (ren) SDL_DestroyRenderer(ren);
     if (win) SDL_DestroyWindow(win);
     ren = NULL; win = NULL; ffmt = -1;
@@ -82,10 +85,34 @@ SDL_FRect video_exact_rect(const SDL_Rect *d, int fw, int fh) {
     return f;
 }
 
+/* CRT look: every game row gets a dark band at its bottom (the gap between a CRT's lines).
+ * A mask with 4 sub-rows per game row, stretched linearly over the picture, so the lines
+ * look the same at any scale (SNES in full screen: 2.14 screen rows per game row). */
+static const Uint8 SCANLINE[4] = {0, 25, 120, 200};   /* alpha of the 4 sub-rows */
+
+static void scanlines(const SDL_FRect *f) {
+    if (fh <= 0 || f->h / fh < 1.5f) return;   /* too small to show lines */
+    if (!scan || scan_h != fh) {
+        if (scan) SDL_DestroyTexture(scan);
+        scan = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, 1, fh * 4);
+        if (!scan) return;
+        Uint32 *px = SDL_malloc(sizeof *px * fh * 4);
+        if (!px) return;
+        for (int i = 0; i < fh * 4; i++) px[i] = (Uint32)SCANLINE[i % 4] << 24;
+        SDL_UpdateTexture(scan, NULL, px, sizeof *px);
+        SDL_free(px);
+        SDL_SetTextureBlendMode(scan, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(scan, SDL_ScaleModeLinear);
+        scan_h = fh;
+    }
+    SDL_RenderCopyF(ren, scan, NULL, f);
+}
+
 static void draw_frame(const SystemCfg *s, float aspect, const SDL_Rect *dst) {
     SDL_FRect f = video_exact_rect(dst, fw, fh);
-    if (s->filter == FILTER_SHARP) {
+    if (s->filter == FILTER_SHARP || s->filter == FILTER_SCANLINES) {
         SDL_RenderCopyF(ren, sharpened(&(Rect){dst->x, dst->y, dst->w, dst->h}), NULL, &f);
+        if (s->filter == FILTER_SCANLINES) scanlines(&f);
     } else {
         SDL_SetTextureScaleMode(frame, s->filter == FILTER_LINEAR ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
         SDL_RenderCopyF(ren, frame, NULL, &f);

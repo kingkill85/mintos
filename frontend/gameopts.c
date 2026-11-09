@@ -3,17 +3,17 @@
 
 static const char *KEY[GO_N] = {"scale", "filter", "overlay"};
 static const char *LABEL[GO_N] = {"Bild", "Filter", "Rahmen"};
-static const char *VAL[GO_N][4] = {
+static const char *VAL[GO_N][5] = {
     {NULL, "integer", "aspect", "full"},
-    {NULL, "nearest", "sharp", "linear"},
+    {NULL, "nearest", "sharp", "linear", "scanlines"},
     {NULL, "none"},
 };
-static const char *TXT[GO_N][4] = {
+static const char *TXT[GO_N][5] = {
     {"Standard", "Ganzzahlig", "Seitenverhältnis", "Vollbild"},
-    {"Standard", "Pixel", "Scharf", "Weich"},
+    {"Standard", "Pixel", "Scharf", "Weich", "Scanlines"},
     {"An", "Aus"},
 };
-static const int COUNT[GO_N] = {4, 4, 2};
+static const int COUNT[GO_N] = {4, 5, 2};
 
 const char *gameopt_label(GameOpt o) { return LABEL[o]; }
 int gameopt_count(GameOpt o) { return COUNT[o]; }

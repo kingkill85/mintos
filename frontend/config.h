@@ -2,7 +2,7 @@
 #pragma once
 
 typedef enum { SCALE_INTEGER, SCALE_ASPECT, SCALE_FULL, SCALE_CUSTOM } ScaleMode;
-typedef enum { FILTER_NEAREST, FILTER_SHARP, FILTER_LINEAR } Filter;
+typedef enum { FILTER_NEAREST, FILTER_SHARP, FILTER_LINEAR, FILTER_SCANLINES } Filter;
 
 typedef struct {
     char core[64];

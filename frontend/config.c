@@ -16,7 +16,8 @@ static void apply(SystemCfg *c, const char *key, const char *val) {
     if (!strcmp(key, "core")) {
         snprintf(c->core, sizeof c->core, "%s", val);
     } else if (!strcmp(key, "filter")) {
-        c->filter = !strcmp(val, "sharp") ? FILTER_SHARP : !strcmp(val, "linear") ? FILTER_LINEAR : FILTER_NEAREST;
+        c->filter = !strcmp(val, "sharp") ? FILTER_SHARP : !strcmp(val, "linear") ? FILTER_LINEAR
+                  : !strcmp(val, "scanlines") ? FILTER_SCANLINES : FILTER_NEAREST;
     } else if (!strcmp(key, "scale")) {
         if (!strncmp(val, "custom", 6) && sscanf(val + 6, "%d %d %d %d", &c->cx, &c->cy, &c->cw, &c->ch) == 4)
             c->scale = SCALE_CUSTOM;
