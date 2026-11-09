@@ -48,12 +48,13 @@ void osd_mark(void) { reread(); mark_seq = cur_seq; }
 
 int osd_used_since_mark(void) { reread(); return cur_seq != mark_seq && cur_kind == 'b'; }
 
-/* a bar pill at the top centre: "HELLIGKEIT" / "LAUTSTÄRKE" and 10 steps as in the settings */
+/* a bar pill centred just below the top bar: "HELLIGKEIT" / "LAUTSTÄRKE" and 10 steps as in the settings */
 void osd_draw(Ui *ui) {
     if (!visible) return;
     const char *label = cur_kind == 'b' ? "HELLIGKEIT" : "LAUTSTÄRKE";
     int bw = 14, gap = 5, bars = 10 * bw + 9 * gap, lw = ui_text_w(ui->btn, label);
-    int w = 20 + lw + 16 + bars + 20, x = (ui->w - w) / 2, y = PAD, cy = y + HINT / 2;
+    int w = 20 + lw + 16 + bars + 20, x = (ui->w - w) / 2, y = PAD + HINT + 12, cy = y + HINT / 2;   /* below the top bar */
+    ui_pill(ui, x - 3, y - 3, w + 6, HINT + 6, UI_BLACK);   /* black edge: it sits on the list */
     ui_pill(ui, x, y, w, HINT, UI_BAR);
     ui_text(ui, ui->btn, label, x + 20, cy, UI_LIGHT, lw);
     int bx = x + 20 + lw + 16;
