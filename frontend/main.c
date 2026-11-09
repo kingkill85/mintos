@@ -64,6 +64,7 @@ static void apply_option(Menu *m) {
     char p[1024];
     snprintf(p, sizeof p, "%s%s", root(), USER_CONFIG_FILE);
     gameopt_set(p, sysname, (GameOpt)m->changed, m->val[m->changed]);
+    m->val[MO_SCALE] = gameopt_get(p, sysname, GO_SCALE);   /* Scanlines change Bild too */
     load_cfg();
 }
 

@@ -31,6 +31,17 @@ int gameopt_get(const char *user, const char *system, GameOpt o) {
     return 0;
 }
 
+#define F_SCANLINES 4   /* VAL[GO_FILTER] */
+#define S_INTEGER 1     /* VAL[GO_SCALE] */
+
+/* Scanlines need whole screen rows per game row: choosing them also sets Bild to Ganzzahlig,
+ * leaving them sets Bild back to Standard */
 int gameopt_set(const char *user, const char *system, GameOpt o, int i) {
-    return config_set(user, system, KEY[o], i > 0 && i < COUNT[o] ? VAL[o][i] : NULL);
+    int was = o == GO_FILTER ? gameopt_get(user, system, GO_FILTER) : -1;
+    int r = config_set(user, system, KEY[o], i > 0 && i < COUNT[o] ? VAL[o][i] : NULL);
+    if (o == GO_FILTER && i == F_SCANLINES && was != F_SCANLINES)
+        r |= config_set(user, system, KEY[GO_SCALE], VAL[GO_SCALE][S_INTEGER]);
+    else if (o == GO_FILTER && was == F_SCANLINES && i != F_SCANLINES)
+        r |= config_set(user, system, KEY[GO_SCALE], NULL);
+    return r;
 }

@@ -44,6 +44,16 @@ int main(void) {
     /* an unknown value in user.cfg reads as Standard */
     config_set(user, "gbc", "filter", "weird");
     CHECK_INT(gameopt_get(user, "gbc", GO_FILTER), 0);
+    /* Scanlines set Bild to Ganzzahlig; leaving them sets it back to Standard */
+    CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 4), 0);
+    CHECK_STR(gameopt_choice(GO_FILTER, 4), "Scanlines");
+    CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 1);
+    CHECK_INT(gameopt_set(user, "snes", GO_SCALE, 3), 0);          /* changing Bild by hand afterwards sticks */
+    CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 4), 0);         /* same filter again: Bild untouched */
+    CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 3);
+    CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 2), 0);
+    CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 0);
+    CHECK_INT(gameopt_get(user, "snes", GO_FILTER), 2);
     unlink(sys); unlink(user);
     TEST_END();
 }
