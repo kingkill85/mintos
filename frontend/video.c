@@ -88,7 +88,7 @@ SDL_FRect video_exact_rect(const SDL_Rect *d, int fw, int fh) {
 /* CRT look: every game row gets a dark band at its bottom (the gap between a CRT's lines).
  * A mask with 4 sub-rows per game row, stretched linearly over the picture, so the lines
  * look the same at any scale (SNES in full screen: 2.14 screen rows per game row). */
-static const Uint8 SCANLINE[4] = {0, 25, 120, 200};   /* alpha of the 4 sub-rows */
+static const Uint8 SCANLINE[4] = {0, 12, 60, 105};   /* alpha of the 4 sub-rows */
 
 static void scanlines(const SDL_FRect *f) {
     if (fh <= 0 || f->h / fh < 1.5f) return;   /* too small to show lines */
