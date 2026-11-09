@@ -1,7 +1,9 @@
 #include "video.h"
+#include <math.h>
 #include "viewport.h"
 #include <SDL_image.h>
 #include <string.h>
+#include <stdlib.h>
 
 static SDL_Window *win;
 static SDL_Renderer *ren;
@@ -68,12 +70,25 @@ static SDL_Texture *sharpened(const Rect *d) {
     return sharp;
 }
 
+/* A rect within a pixel of a uniform scale gets that scale exactly, as a fraction: GBA
+ * 240x160 in 640x427 is 8/3 = 426.67 high. Rounded to 427, one row in the middle got the
+ * wrong height and the LCD grid of the frame (Perfect_GBA) no longer lined up there. */
+SDL_FRect video_exact_rect(const SDL_Rect *d, int fw, int fh) {
+    SDL_FRect f = {d->x, d->y, d->w, d->h};
+    if (fw <= 0 || fh <= 0) return f;
+    float hx = (float)fh * d->w / fw, wy = (float)fw * d->h / fh;
+    if (fabsf(hx - d->h) < 1.0f && hx != d->h) f.h = hx;
+    else if (fabsf(wy - d->w) < 1.0f && wy != d->w) f.w = wy;
+    return f;
+}
+
 static void draw_frame(const SystemCfg *s, float aspect, const SDL_Rect *dst) {
+    SDL_FRect f = video_exact_rect(dst, fw, fh);
     if (s->filter == FILTER_SHARP) {
-        SDL_RenderCopy(ren, sharpened(&(Rect){dst->x, dst->y, dst->w, dst->h}), NULL, dst);
+        SDL_RenderCopyF(ren, sharpened(&(Rect){dst->x, dst->y, dst->w, dst->h}), NULL, &f);
     } else {
         SDL_SetTextureScaleMode(frame, s->filter == FILTER_LINEAR ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
-        SDL_RenderCopy(ren, frame, NULL, dst);
+        SDL_RenderCopyF(ren, frame, NULL, &f);
     }
     (void)aspect;
 }
@@ -92,7 +107,14 @@ void video_draw(const SystemCfg *s, float aspect, bool dim) {
         overlay = *s->overlay ? IMG_LoadTexture(ren, s->overlay) : NULL;
         snprintf(overlay_path, sizeof overlay_path, "%s", s->overlay);
     }
-    if (overlay) SDL_RenderCopy(ren, overlay, NULL, NULL);
+    if (overlay) {
+        /* a frame a few pixels off the screen size is drawn 1:1, not stretched: Jeltron_GB-Color
+         * is 640x479, stretched to 480 one row doubled and its LCD grid slipped off the game */
+        int ow, oh;
+        SDL_QueryTexture(overlay, NULL, NULL, &ow, &oh);
+        SDL_Rect o = {0, 0, ow, oh};
+        SDL_RenderCopy(ren, overlay, NULL, abs(ow - sw) <= 2 && abs(oh - sh) <= 2 ? &o : NULL);
+    }
     if (dim) {
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 170);
         SDL_RenderFillRect(ren, NULL);

@@ -14,5 +14,7 @@ void video_frame(const void *data, unsigned w, unsigned h, size_t pitch, enum re
 /* draws the last frame per s (and s->overlay); dim darkens it for the menu. No present. */
 void video_draw(const SystemCfg *s, float aspect, bool dim);
 void video_flip(void);
+/* dst snapped to the exact uniform scale of a fw x fh frame when it is within a pixel of it */
+SDL_FRect video_exact_rect(const SDL_Rect *d, int fw, int fh);
 /* the current picture (without overlay) scaled to w x h, caller frees; NULL if none */
 SDL_Surface *video_snapshot(int w, int h);

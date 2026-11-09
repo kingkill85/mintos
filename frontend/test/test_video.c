@@ -1,5 +1,5 @@
 // uses: frontend/video.c frontend/viewport.c
-// libs: $(pkg-config --libs sdl2 SDL2_image)
+// libs: $(pkg-config --libs sdl2 SDL2_image) -lm
 #include <string.h>
 #include <stdint.h>
 #include "check.h"
@@ -45,5 +45,13 @@ int main(void) {
     video_frame(NULL, 128, 112, 0, RETRO_PIXEL_FORMAT_XRGB8888);
     video_draw(&s, 0, false);
     video_close();
+    {   /* GBA in 640x427: exactly 8/3 high (426.67), so the frame's LCD grid lines up */
+        SDL_FRect f = video_exact_rect(&(SDL_Rect){0, 0, 640, 427}, 240, 160);
+        CHECK(f.w == 640 && f.h > 426.66f && f.h < 426.67f);
+        f = video_exact_rect(&(SDL_Rect){80, 24, 480, 432}, 160, 144);   /* exact 3x: unchanged */
+        CHECK(f.x == 80 && f.y == 24 && f.w == 480 && f.h == 432);
+        f = video_exact_rect(&(SDL_Rect){0, 0, 640, 480}, 256, 224);     /* full screen, not uniform: unchanged */
+        CHECK(f.w == 640 && f.h == 480);
+    }
     TEST_END();
 }
