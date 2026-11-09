@@ -10,6 +10,10 @@
 int  osd_poll(void);        /* 1 when the overlay appeared, changed or went away: redraw */
 void osd_draw(Ui *ui);      /* draws the overlay while it is visible */
 
+/* a line of text (achievements) shown for OSD_MS * 2 by osd_poll / osd_draw; a new one replaces it */
+void osd_toast(const char *text);
+const char *osd_toast_text(void);   /* the visible toast, "" when none */
+
 /* F opens a menu on release, unless F + volume changed the brightness meanwhile:
  * osd_mark() on F down, osd_used_since_mark() on F up */
 void osd_mark(void);

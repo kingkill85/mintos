@@ -26,7 +26,9 @@ void core_unload(Core *c);
 size_t core_state_size(Core *c);
 bool core_state_save(Core *c, void *buf, size_t n);
 bool core_state_load(Core *c, const void *buf, size_t n);
-void *core_memory(Core *c, unsigned id, size_t *size);   /* RETRO_MEMORY_SAVE_RAM / _RTC */
+void *core_memory(Core *c, unsigned id, size_t *size);   /* RETRO_MEMORY_SAVE_RAM / _RTC / _SYSTEM_RAM */
+/* the core's SET_MEMORY_MAPS (descriptors copied), NULL if the core set none; valid until core_unload */
+const struct retro_memory_map *core_memory_map(Core *c);
 const char *core_option(Core *c, const char *key);       /* current value or NULL */
 /* multi-disc games (disk control interface); count 0 = not supported */
 unsigned core_disc_count(Core *c);

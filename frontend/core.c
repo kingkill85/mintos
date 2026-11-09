@@ -45,6 +45,22 @@ static Core *cur;
 static struct retro_disk_control_callback disk;
 static char sysdir[1024], savedir[1024], optfile[1024];
 static void *romdata;
+static struct retro_memory_map mmap_copy;   /* descriptors malloc'd; num 0 = none */
+
+static void mmap_free(void) {
+    free((void *)mmap_copy.descriptors);
+    memset(&mmap_copy, 0, sizeof mmap_copy);
+}
+
+static void mmap_set(const struct retro_memory_map *m) {
+    mmap_free();
+    if (!m || !m->num_descriptors || !m->descriptors) return;
+    struct retro_memory_descriptor *d = malloc(m->num_descriptors * sizeof *d);
+    if (!d) return;
+    memcpy(d, m->descriptors, m->num_descriptors * sizeof *d);
+    mmap_copy.descriptors = d;
+    mmap_copy.num_descriptors = m->num_descriptors;
+}
 
 /* ---------- options ---------- */
 #define MAXOPT 256
@@ -211,7 +227,8 @@ static bool environment(unsigned cmd, void *data) {
     case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
     case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
     case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
-    case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
+    case RETRO_ENVIRONMENT_SET_MEMORY_MAPS & ~RETRO_ENVIRONMENT_EXPERIMENTAL:   /* the switch masks that bit */
+        mmap_set(data); return true;
     case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
     case RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY:
     case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE:
@@ -251,6 +268,7 @@ static int16_t input_cb(unsigned p, unsigned d, unsigned i, unsigned id) { retur
 
 int core_load(Core *c, const char *so, const char *rom) {
     cur = c;
+    mmap_free();
     c->dl = dlopen(so, RTLD_NOW | RTLD_LOCAL);
     if (!c->dl) { rg_log("dlopen %s: %s\n", so, dlerror()); return -1; }
     SYM(init); SYM(deinit); SYM(run); SYM(reset); SYM(unload_game); SYM(get_system_info);
@@ -321,6 +339,7 @@ void core_unload(Core *c) {
     /* not dlclose'd: several cores do not survive being unloaded and loaded again */
     memset(&f, 0, sizeof f);
     memset(&disk, 0, sizeof disk);
+    mmap_free();
 }
 
 size_t core_state_size(Core *c) { (void)c; return f.serialize_size ? f.serialize_size() : 0; }
@@ -332,6 +351,8 @@ void *core_memory(Core *c, unsigned id, size_t *size) {
     *size = f.get_memory_size ? f.get_memory_size(id) : 0;
     return *size && f.get_memory_data ? f.get_memory_data(id) : NULL;
 }
+
+const struct retro_memory_map *core_memory_map(Core *c) { (void)c; return mmap_copy.num_descriptors ? &mmap_copy : NULL; }
 
 unsigned core_disc_count(Core *c) { (void)c; return disk.get_num_images ? disk.get_num_images() : 0; }
 unsigned core_disc_index(Core *c) { (void)c; return disk.get_image_index ? disk.get_image_index() : 0; }

@@ -1,6 +1,8 @@
 /* Minimal libretro core for rgarch tests: 160x144 XRGB8888 solid frames whose colour
  * depends on a frame counter and the option test_colour (red|blue), 800 stereo samples
- * per frame at 48 kHz, 8 bytes SRAM, serialize = the 4-byte counter. */
+ * per frame at 48 kHz, 8 bytes SRAM, serialize = the 4-byte counter.
+ * System RAM: 16 bytes, ram[0] = counter & 0xff after every frame, ram[1] = 1 always;
+ * a ROM path containing "mmap" also sets a memory map (one descriptor over ram). */
 #include <string.h>
 #include <stdint.h>
 #include "libretro.h"
@@ -19,7 +21,7 @@ static bool d_replace(unsigned i, const struct retro_game_info *g) { (void)i; (v
 static bool d_add(void) { return false; }
 static retro_input_poll_t poll;
 static uint32_t counter, frame[160 * 144];
-static uint8_t sram[8];
+static uint8_t sram[8], ram[16] = {0, 1};
 static int16_t samples[800 * 2];
 
 void retro_set_environment(retro_environment_t cb) {
@@ -52,7 +54,7 @@ void retro_get_system_av_info(struct retro_system_av_info *i) {
     i->timing.fps = 60.0; i->timing.sample_rate = 48000.0;
 }
 void retro_set_controller_port_device(unsigned p, unsigned d) { (void)p; (void)d; }
-void retro_reset(void) { counter = 0; }
+void retro_reset(void) { counter = 0; ram[0] = 0; }
 void retro_run(void) {
     poll();
     struct retro_variable v = {"test_colour", NULL};
@@ -66,15 +68,22 @@ void retro_run(void) {
     else
         audio(samples, 800);
     counter++;
+    ram[0] = counter & 0xff;
 }
 size_t retro_serialize_size(void) { return 4; }
 bool retro_serialize(void *d, size_t n) { if (n < 4) return false; memcpy(d, &counter, 4); return true; }
-bool retro_unserialize(const void *d, size_t n) { if (n < 4) return false; memcpy(&counter, d, 4); return true; }
+bool retro_unserialize(const void *d, size_t n) { if (n < 4) return false; memcpy(&counter, d, 4); ram[0] = counter & 0xff; return true; }
 void retro_cheat_reset(void) {}
 void retro_cheat_set(unsigned i, bool e, const char *c) { (void)i; (void)e; (void)c; }
 bool retro_load_game(const struct retro_game_info *g) {
     /* like Genesis Plus GX for cartridges: drop the disk interface again with NULL */
     if (g && g->path && strstr(g->path, "nodisk")) env(RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE, NULL);
+    if (g && g->path && strstr(g->path, "mmap")) {
+        static struct retro_memory_descriptor d[1];
+        d[0].ptr = ram; d[0].start = 0; d[0].len = sizeof ram;
+        struct retro_memory_map m = {d, 1};
+        env(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &m);
+    }
     /* like real cores without zip support: archive bytes are not a ROM */
     if (g && g->data && g->size >= 2 && !memcmp(g->data, "PK", 2)) return false;
     enum retro_pixel_format f = RETRO_PIXEL_FORMAT_XRGB8888;
@@ -83,5 +92,5 @@ bool retro_load_game(const struct retro_game_info *g) {
 bool retro_load_game_special(unsigned t, const struct retro_game_info *g, size_t n) { (void)t; (void)g; (void)n; return false; }
 void retro_unload_game(void) {}
 unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
-void *retro_get_memory_data(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? sram : NULL; }
-size_t retro_get_memory_size(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? sizeof sram : 0; }
+void *retro_get_memory_data(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? (void *)sram : id == RETRO_MEMORY_SYSTEM_RAM ? (void *)ram : NULL; }
+size_t retro_get_memory_size(unsigned id) { return id == RETRO_MEMORY_SAVE_RAM ? sizeof sram : id == RETRO_MEMORY_SYSTEM_RAM ? sizeof ram : 0; }

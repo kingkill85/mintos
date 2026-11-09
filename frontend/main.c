@@ -14,6 +14,7 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include "audio.h"
+#include "cheevos.h"
 #include "config.h"
 #include "core.h"
 #include "gameopts.h"
@@ -92,6 +93,13 @@ static void scumm_save_resume(void) {
 }
 
 static const char *root(void) { const char *r = getenv("RGARCH_ROOT"); return r ? r : ""; }
+
+/* every savestate load (slot or resume): achievements must not fire from hit counts of before */
+static bool load_state(int slot) {
+    if (!state_load(&core, rom, slot)) return false;
+    cheevos_reset();
+    return true;
+}
 
 /* systems.cfg, then the player's own choices from user.cfg; -1 without systems.cfg */
 static int load_cfg(void) {
@@ -193,7 +201,7 @@ static bool run_menu(int *slot) {
                 /* an empty slot does nothing (its preview says "Leer") */
                 if (state_exists(rom, m.slot)) {
                     if (kstates) { send_key(RETROK_1 + m.slot, RETROKMOD_CTRL); open = false; }
-                    else if (state_load(&core, rom, m.slot)) open = false;
+                    else if (load_state(m.slot)) open = false;
                     else menu_failed(&m, M_LOAD);
                 }
                 break;
@@ -212,7 +220,7 @@ static bool run_menu(int *slot) {
                     unlink(scumm_resume);
                     restart = true;
                     keep = false;
-                } else core_reset(&core);
+                } else { core_reset(&core); cheevos_reset(); }
                 rg_log("reset%s\n", restart ? " (scummvm: start again)" : "");
                 open = false;
                 break;
@@ -226,6 +234,7 @@ static bool run_menu(int *slot) {
             pv = state_preview(ui.ren, rom, m.slot);
             pv_slot = m.slot;
         }
+        cheevos_idle();
         video_draw(&cfg, aspect(), true);
         menu_draw(&ui, &m, title, menu_on_slot_item(&m) ? pv : NULL);
         osd_poll();
@@ -286,6 +295,7 @@ int main(int argc, char **argv) {
     } else scumm_resume[0] = 0;
     audio_open(core.av.timing.sample_rate);
     state_sram_load(&core, rom);
+    cheevos_start(&core, system, rom);   /* from the synced files only, never the network */
 
     int slot = 0;
     Uint32 last_sram = SDL_GetTicks();
@@ -300,6 +310,7 @@ int main(int argc, char **argv) {
             if (++pending.step == 2) pending.code = 0;
         }
         core_run(&core);
+        cheevos_frame();
         Uint32 t_b = SDL_GetTicks();
         if (core.geometry_changed) {   /* SET_SYSTEM_AV_INFO may bring a new sample rate */
             audio_set_rate(core.av.timing.sample_rate);
@@ -309,7 +320,7 @@ int main(int argc, char **argv) {
         if (first) {
             /* every start continues where the game was left (Beenden or power key); Neustart in the
              * menu or --fresh starts over. --resume (rglauncher after a power-off) loads it too. */
-            if (core.can_state && (resume || (!fresh && state_exists(rom, -1))) && !state_load(&core, rom, -1)) {
+            if (core.can_state && (resume || (!fresh && state_exists(rom, -1))) && !load_state(-1)) {
                 /* keep an unloadable resume point aside instead of losing it on the next power-off */
                 char a[1024], b[1100];
                 if (!path_for(P_AUTO, rom, 0, a, sizeof a)) {
@@ -344,6 +355,7 @@ int main(int argc, char **argv) {
     state_sram_wait();
     state_sram_save(&core, rom);
     audio_close();
+    cheevos_stop();
     core_unload(&core);
     video_close();
     rg_log("exit (%s)\n", quit_signal ? "signal" : restart ? "restart" : "menu");

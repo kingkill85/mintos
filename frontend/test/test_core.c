@@ -105,7 +105,28 @@ int main(void) {
     Core c5 = {.on_video = on_video, .on_audio = on_audio, .on_input = on_input};
     CHECK_INT(core_load(&c5, "./testcore.so", nrom), 0);
     CHECK_INT(core_disc_count(&c5), 0);
+    CHECK(core_memory_map(&c5) == NULL);   /* this core sets no memory map */
+    size_t rsz = 0;
+    CHECK(core_memory(&c5, RETRO_MEMORY_SYSTEM_RAM, &rsz) != NULL);
+    CHECK_INT(rsz, 16);
     core_unload(&c5);
+
+    /* SET_MEMORY_MAPS: the frontend keeps its own copy of the descriptors */
+    char mrom[1024];
+    snprintf(mrom, sizeof mrom, "%s/storage/roms/test/mmap.tst", root);
+    snprintf(zcmd, sizeof zcmd, "echo x > '%s'", mrom);
+    system(zcmd);
+    Core c6 = {.on_video = on_video, .on_audio = on_audio, .on_input = on_input};
+    CHECK_INT(core_load(&c6, "./testcore.so", mrom), 0);
+    const struct retro_memory_map *mm = core_memory_map(&c6);
+    CHECK(mm != NULL);
+    if (mm) {
+        CHECK_INT(mm->num_descriptors, 1);
+        CHECK_INT(mm->descriptors[0].len, 16);
+        CHECK(mm->descriptors[0].ptr == core_memory(&c6, RETRO_MEMORY_SYSTEM_RAM, &rsz));
+    }
+    core_unload(&c6);
+    CHECK(core_memory_map(&c6) == NULL);   /* gone with the game */
 
     Core c3 = {0};
     CHECK_INT(core_load(&c3, "./missing.so", rom), -1);
