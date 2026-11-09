@@ -84,14 +84,17 @@ SDL_FRect video_exact_rect(const SDL_Rect *d, int fw, int fh) {
 
 /* CRT look: a dark line under every game row (the gap between a CRT's lines). Even lines
  * need a whole number of screen rows per game row, so the picture is scaled vertically by
- * an integer (SNES 224 rows: 2x = 448, 16 px border top and bottom); the width stays. */
+ * an integer (SNES 224 rows: 2x = 448, 16 px border top and bottom) and the width by the
+ * same factor, keeping the proportions (SNES full screen: 597x448, still 4:3). */
 #define SCANLINE_ALPHA 90
 
 static SDL_FRect scanline_rect(SDL_FRect f) {
     int k = fh > 0 ? (int)(f.h / fh + 0.01f) : 0;
     if (k < 2) return f;   /* below 2 rows per game row there is no room for lines */
-    float h = (float)k * fh;
+    float h = (float)k * fh, w = floorf(f.w * h / f.h + 0.5f);
+    f.x = floorf(f.x + (f.w - w) / 2);
     f.y = floorf(f.y + (f.h - h) / 2);
+    f.w = w;
     f.h = h;
     return f;
 }
