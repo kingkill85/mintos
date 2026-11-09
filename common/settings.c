@@ -42,7 +42,7 @@ void bl_set(int step) {
 void bl_power(int on) { write_int(BACKLIGHT "/bl_power", on ? 0 : 4); }
 
 int vol_get(void) {
-    FILE *p = popen("amixer -c rk817int sget Master 2>/dev/null", "r");
+    FILE *p = popen("amixer -M -c rk817int sget Master 2>/dev/null", "r");
     if (!p) return -1;
     char line[256];
     int v = -1;
@@ -56,7 +56,7 @@ int vol_get(void) {
 
 void vol_set(int pct) {
     char cmd[96];
-    snprintf(cmd, sizeof cmd, "amixer -q -c rk817int sset Master %d%% >/dev/null 2>&1", pct < 0 ? 0 : pct > 100 ? 100 : pct);
+    snprintf(cmd, sizeof cmd, "amixer -q -M -c rk817int sset Master %d%% >/dev/null 2>&1", pct < 0 ? 0 : pct > 100 ? 100 : pct);
     if (system(cmd)) {}
 }
 

@@ -4,7 +4,7 @@
 - Routes output to the speaker, or to the headphones while a plug is in. Mainline
   leaves "Playback Mux" on HP, so the speaker stays silent. The jack state is the ALSA
   card control "Headphones Jack"; changes arrive as SW_HEADPHONE_INSERT events.
-- Volume buttons (gpio-keys-vol) change "Master" in 5 % steps; holding repeats.
+- Volume buttons (gpio-keys-vol) change "Master" in 5 % steps of the perceptual scale; holding repeats.
   With F held (BTN_MODE on "RG353V Gamepad") they change the brightness in the 10 steps of
   the settings instead. Every change goes to /run/mintos-osd ("<seq> vol|bright <0..10>"),
   which rglauncher and rgarch show as an overlay (common/osd.c).
@@ -175,7 +175,9 @@ async def volume(dev):
                 if v is not None:
                     osd("vol", (v * 10 + 63) // 127)
             elif d:
-                v = master_pct(amixer("sset", "Master", "5%+" if d > 0 else "5%-"))
+                # -M: perceptual scale (as alsamixer); the raw one is linear in dB from
+                # -95 to 0 dB, so its 50 % (-47 dB) sounded like 10 %
+                v = master_pct(amixer("-M", "sset", "Master", "5%+" if d > 0 else "5%-"))
                 if v is not None:
                     osd("vol", (v + 5) // 10)
 
