@@ -170,9 +170,9 @@ static void shadow_text(Ui *ui, const char *s, int x, int cy, SDL_Color c, int m
 
 /* geometry from MinUI's menu (minui-menu-gbc.png at 640x480) */
 #define ITEM_Y (PAD + HINT + 16)    /* first item's top, as in the launcher list */
-/* row step: full pills up to 5 items, 52 for 6-7 (Disc wechseln, Optionen), 34 for 8 (with Erfolge)
+/* row step: full pills up to 5 items, 52 for 6, 34 for 7-8 (with Optionen/Erfolge/Disc)
  * so the last pill stays above the message line (text centre y = h-PAD-HINT-30) */
-static int menu_item_step(const Menu *m) { return m->nitems > 7 ? 34 : m->nitems > 5 ? 52 : PILL; }
+static int menu_item_step(const Menu *m) { return m->nitems > 6 ? 34 : m->nitems > 5 ? 52 : PILL; }
 int menu_item_y(const Menu *m, int i) { int s = menu_item_step(m); return ITEM_Y + i * s + (s - PILL) / 2; }
 #define PV_X 284
 #define PV_Y 100
