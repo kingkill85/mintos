@@ -16,7 +16,8 @@
  *   writes its auto save state on SIGTERM) and the device powers off; rglauncher starts that game
  *   again on boot with RESUME=1. logind's own power key handling is off (logind.conf.d/rg353v.conf).
  */
-#include "helpers.h"
+#include "mintosd_helpers.h"
+#include "util.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -52,46 +53,8 @@ static const char CURRENT[] = "/run/rglauncher-current", RESUME[] = "/storage/.c
 static const char BT_CONF[] = "/run/mintos/asound-bt.conf", OSD_FILE[] = "/run/mintos-osd";
 static const char BACKLIGHT[] = "/sys/class/backlight/backlight";
 
-/* run a command, its stdout into out (may be 0); gives up after 5 s. Returns the exit status or -1. */
-static int run(char *const argv[], char *out, size_t n) {
-    int p[2];
-    if (out && n) out[0] = 0;
-    if (pipe(p)) return -1;
-    pid_t pid = fork();
-    if (pid < 0) { close(p[0]); close(p[1]); return -1; }
-    if (pid == 0) {
-        int null = open("/dev/null", O_RDWR);
-        dup2(null, 0); dup2(p[1], 1); dup2(null, 2);
-        execvp(argv[0], argv);
-        _exit(127);
-    }
-    close(p[1]);
-    size_t got = 0;
-    struct timespec t0, t;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    for (;;) {
-        clock_gettime(CLOCK_MONOTONIC, &t);
-        int left = 5000 - (int)((t.tv_sec - t0.tv_sec) * 1000 + (t.tv_nsec - t0.tv_nsec) / 1000000);
-        struct pollfd pf = { p[0], POLLIN, 0 };
-        if (left <= 0 || poll(&pf, 1, left) <= 0) { kill(pid, SIGKILL); break; }
-        char buf[512];
-        ssize_t r = read(p[0], buf, sizeof buf);
-        if (r <= 0) break;
-        if (out && got + 1 < n) {
-            size_t c = (size_t)r < n - 1 - got ? (size_t)r : n - 1 - got;
-            memcpy(out + got, buf, c);
-            got += c;
-            out[got] = 0;
-        }
-    }
-    close(p[0]);
-    int st;
-    while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
-    return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
-}
-
-#define RUN(out, ...) run((char *[]){ __VA_ARGS__, NULL }, out, sizeof out)
-#define RUNQ(...) run((char *[]){ __VA_ARGS__, NULL }, NULL, 0)
+#define RUN(out, ...) RUN_OUT(out, 5000, __VA_ARGS__)
+#define RUNQ(...) RUN_Q(5000, __VA_ARGS__)
 
 static void write_file(const char *path, const char *s) {   /* atomically, via path.tmp */
     char tmp[256];
@@ -223,10 +186,7 @@ static void power_off(void) {   /* in a child: the pad keeps working while the g
 
 /* ---- devices ---- */
 
-static void emit(int type, int code, int value) {
-    struct input_event ev = { .type = type, .code = code, .value = value };
-    if (write(uifd, &ev, sizeof ev) < 0) {}
-}
+static void emit(int type, int code, int value) { input_emit(uifd, type, code, value); }
 
 static int is_pad_source(const char *name) {
     for (size_t i = 0; i < sizeof PAD_SOURCES / sizeof *PAD_SOURCES; i++)

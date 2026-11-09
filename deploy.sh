@@ -6,7 +6,10 @@ cd "$(dirname "$0")"
 HOST=${RG353V:-root@192.168.178.37}
 scp -q build/rglauncher "$HOST:/storage/.config/rglauncher/rglauncher.new"
 scp -q build/rgarch "$HOST:/usr/local/bin/rgarch.new" && ssh "$HOST" 'mv /usr/local/bin/rgarch.new /usr/local/bin/rgarch'
-scp -q build/mintosd "$HOST:/usr/local/sbin/mintosd.new" && ssh "$HOST" 'mv /usr/local/sbin/mintosd.new /usr/local/sbin/mintosd'
+# system tools (tools/, C): unpacked next to the running ones, then renamed over them
+tar -C build/tools --owner=0 --group=0 --exclude=gen -cf - . | ssh "$HOST" 'set -e; mkdir -p /tmp/mintos-tools; tar -C /tmp/mintos-tools -xf -
+  for f in /tmp/mintos-tools/*; do cp -P "$f" "/usr/local/sbin/.$(basename "$f")" && mv -T "/usr/local/sbin/.$(basename "$f")" "/usr/local/sbin/$(basename "$f")"; done
+  rm -rf /tmp/mintos-tools'
 tar -C os/files --owner=0 --group=0 -cf - storage etc usr | ssh "$HOST" 'tar -C / -xf - && systemctl daemon-reload
   # mintosd replaced the Python daemons rg353-pad/-audio/-power
   if [ -e /etc/systemd/system/rg353-pad.service ]; then

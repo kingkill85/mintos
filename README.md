@@ -28,8 +28,14 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
     RG353V drivers it lacks (NV3051D panel, adc-joystick, pwm-vibra).
   - Both use the DTB with the Wi-Fi SDIO limited to 25 MHz high-speed (SDR50 gave CRC errors).
 - `os/files/`: everything installed on top of Debian: systemd units, iwd, sshd, RetroArch
-  config, `launch.sh` (system → core), and helpers:
-  - `mintosd` (C, `daemon/`, ~1.5 MB RAM; replaced three Python daemons of ~60 MB):
+  config, `launch.sh` (system → core), and shell helpers:
+  - `wifi-check`: gets the RTL8821CS up after boot (re-probes the SDIO controller if the card
+    was not detected, reloads rtw88 after firmware upload errors) until iwd connects.
+  - `no-fbcon`: detaches and blanks the text console, so no kernel text shows between list and game.
+  - `usb-net`: USB NCM gadget, the device is `10.55.0.2` (PC side `10.55.0.1/24`), SSH works without Wi-Fi.
+- `tools/`: the system helpers in C (no Python on the device), built by `build.sh` into
+  `build/tools/` and installed to `/usr/local/sbin`:
+  - `mintosd` (~1.5 MB RAM; replaced three Python daemons of ~60 MB):
     - merges the buttons, the F key and the sticks (separate kernel devices) into one
       uinput gamepad "RG353V Gamepad".
     - speaker/headphone switching (mainline leaves it on headphones), the volume buttons
@@ -37,16 +43,14 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
     - power key like Garlic OS. During a game it remembers the game, lets the game write its
       auto save state and powers off; on the next boot rglauncher starts that game again
       and loads the state. Outside games it just powers off.
-  - `wifi-check`: gets the RTL8821CS up after boot (re-probes the SDIO controller if the card
-    was not detected, reloads rtw88 after firmware upload errors) until iwd connects.
-  - `no-fbcon`: detaches and blanks the text console, so no kernel text shows between list and game.
-  - `mintos-wifi`, `mintos-bt`: Wi-Fi (iwd D-Bus) and Bluetooth (bluetoothctl) for the settings.
-  - `usb-net`: USB NCM gadget, the device is `10.55.0.2` (PC side `10.55.0.1/24`), SSH works without Wi-Fi.
+  - `mintos-wifi`, `mintos-bt`: Wi-Fi (iwd over sd-bus) and Bluetooth (bluetoothctl) for the settings.
+  - `mi2-copyprotect`: answers Monkey Island 2's copy protection; `fbgrab` (screenshot of the panel),
+    `rg353-press` / `rg353-type` (inject buttons / keys): testing aids.
 - `os/chroot-install.sh`, `os/stage.sh`, `os/flash-sd.sh`: build the root filesystem on the
   device while it runs Android (adb root, no card reader needed) and write it to the SD card.
 - `os/restore-android.sh`: the way back in when the SD's system is unreachable (maskrom ->
   Android on the eMMC -> adb root repairs the SD; the comments list the steps back to SD boot).
-- Host tests: `frontend/test/run.sh` (C, incl. mintosd) and `python3 -I os/test/test_*.py` (helpers).
+- Host tests: `frontend/test/run.sh` (C, incl. the tools; recorded iwd/bluetoothctl data in `os/test/`).
 
 ## rgarch (games)
 

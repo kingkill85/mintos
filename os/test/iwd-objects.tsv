@@ -1,0 +1,82 @@
+# GetManagedObjects of iwd as mintos-wifi flattens it: path<TAB>interface<TAB>property<TAB>value
+# (property empty: the interface without properties; booleans 0/1; arrays left out)
+/	org.freedesktop.DBus.ObjectManager		
+/net/connman/iwd	net.connman.iwd.Daemon		
+/net/connman/iwd	org.freedesktop.DBus.Properties		
+/net/connman/iwd	net.connman.iwd.AgentManager		
+/net/connman/iwd	net.connman.iwd.p2p.ServiceManager		
+/net/connman/iwd/0	net.connman.iwd.Adapter		
+/net/connman/iwd/0	net.connman.iwd.Adapter	Powered	1
+/net/connman/iwd/0	net.connman.iwd.Adapter	Name	phy0
+/net/connman/iwd/0	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2	net.connman.iwd.Device		
+/net/connman/iwd/0/2	net.connman.iwd.Device	Name	wlan0
+/net/connman/iwd/0/2	net.connman.iwd.Device	Address	34:7d:e4:17:84:f0
+/net/connman/iwd/0/2	net.connman.iwd.Device	Powered	1
+/net/connman/iwd/0/2	net.connman.iwd.Device	Adapter	/net/connman/iwd/0
+/net/connman/iwd/0/2	net.connman.iwd.Device	Mode	station
+/net/connman/iwd/0/2	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2	net.connman.iwd.Station		
+/net/connman/iwd/0/2	net.connman.iwd.Station	ConnectedNetwork	/net/connman/iwd/0/2/546172646973_psk
+/net/connman/iwd/0/2	net.connman.iwd.Station	ConnectedAccessPoint	/net/connman/iwd/0/2/546172646973_psk/b0f208509aec
+/net/connman/iwd/0/2	net.connman.iwd.Station	Scanning	0
+/net/connman/iwd/0/2	net.connman.iwd.Station	State	connected
+/net/connman/iwd/0/2	net.connman.iwd.SimpleConfiguration		
+/net/connman/iwd/0/2	net.connman.iwd.DeviceProvisioning		
+/net/connman/iwd/0/2	net.connman.iwd.DeviceProvisioning	Started	0
+/net/connman/iwd/0/2	net.connman.iwd.SharedCodeDeviceProvisioning		
+/net/connman/iwd/0/2	net.connman.iwd.SharedCodeDeviceProvisioning	Started	0
+/net/connman/iwd/0/2	net.connman.iwd.StationDiagnostic		
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open	net.connman.iwd.Network		
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open	net.connman.iwd.Network	Name	Vodafone Homespot
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open	net.connman.iwd.Network	Connected	0
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open	net.connman.iwd.Network	Device	/net/connman/iwd/0/2
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open	net.connman.iwd.Network	Type	open
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open/0e7fb26bbd16	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open/0e7fb26bbd16	net.connman.iwd.BasicServiceSet	Address	0e:7f:b2:6b:bd:16
+/net/connman/iwd/0/2/566f6461666f6e6520486f6d6573706f74_open/0e7fb26bbd16	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk	net.connman.iwd.Network		
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk	net.connman.iwd.Network	Name	Vodafone-2008
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk	net.connman.iwd.Network	Connected	0
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk	net.connman.iwd.Network	Device	/net/connman/iwd/0/2
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk	net.connman.iwd.Network	Type	psk
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk/0c7fb26bbd12	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk/0c7fb26bbd12	net.connman.iwd.BasicServiceSet	Address	0c:7f:b2:6b:bd:12
+/net/connman/iwd/0/2/566f6461666f6e652d32303038_psk/0c7fb26bbd12	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk	net.connman.iwd.Network		
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk	net.connman.iwd.Network	Name	Vodafone-EC94
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk	net.connman.iwd.Network	Connected	0
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk	net.connman.iwd.Network	Device	/net/connman/iwd/0/2
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk	net.connman.iwd.Network	Type	psk
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk/b8a53527ec98	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk/b8a53527ec98	net.connman.iwd.BasicServiceSet	Address	b8:a5:35:27:ec:98
+/net/connman/iwd/0/2/566f6461666f6e652d45433934_psk/b8a53527ec98	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/546172646973_psk	net.connman.iwd.Network		
+/net/connman/iwd/0/2/546172646973_psk	net.connman.iwd.Network	Name	Tardis
+/net/connman/iwd/0/2/546172646973_psk	net.connman.iwd.Network	Connected	1
+/net/connman/iwd/0/2/546172646973_psk	net.connman.iwd.Network	Device	/net/connman/iwd/0/2
+/net/connman/iwd/0/2/546172646973_psk	net.connman.iwd.Network	Type	psk
+/net/connman/iwd/0/2/546172646973_psk	net.connman.iwd.Network	KnownNetwork	/net/connman/iwd/546172646973_psk
+/net/connman/iwd/0/2/546172646973_psk	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/546172646973_psk/3c3712dbadd4	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/546172646973_psk/3c3712dbadd4	net.connman.iwd.BasicServiceSet	Address	3c:37:12:db:ad:d4
+/net/connman/iwd/0/2/546172646973_psk/3c3712dbadd4	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/546172646973_psk/3c3712dbadd3	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/546172646973_psk/3c3712dbadd3	net.connman.iwd.BasicServiceSet	Address	3c:37:12:db:ad:d3
+/net/connman/iwd/0/2/546172646973_psk/3c3712dbadd3	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/546172646973_psk/b0f208509aeb	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/546172646973_psk/b0f208509aeb	net.connman.iwd.BasicServiceSet	Address	b0:f2:08:50:9a:eb
+/net/connman/iwd/0/2/546172646973_psk/b0f208509aeb	org.freedesktop.DBus.Properties		
+/net/connman/iwd/0/2/546172646973_psk/b0f208509aec	net.connman.iwd.BasicServiceSet		
+/net/connman/iwd/0/2/546172646973_psk/b0f208509aec	net.connman.iwd.BasicServiceSet	Address	b0:f2:08:50:9a:ec
+/net/connman/iwd/0/2/546172646973_psk/b0f208509aec	org.freedesktop.DBus.Properties		
+/net/connman/iwd/546172646973_psk	net.connman.iwd.KnownNetwork		
+/net/connman/iwd/546172646973_psk	net.connman.iwd.KnownNetwork	Name	Tardis
+/net/connman/iwd/546172646973_psk	net.connman.iwd.KnownNetwork	Type	psk
+/net/connman/iwd/546172646973_psk	net.connman.iwd.KnownNetwork	Hidden	0
+/net/connman/iwd/546172646973_psk	net.connman.iwd.KnownNetwork	AutoConnect	1
+/net/connman/iwd/546172646973_psk	net.connman.iwd.KnownNetwork	LastConnectedTime	2026-11-08T22:18:56Z
+/net/connman/iwd/546172646973_psk	org.freedesktop.DBus.Properties		

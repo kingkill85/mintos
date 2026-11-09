@@ -1,7 +1,7 @@
-// uses: daemon/helpers.c
-/* Host tests for the pure parts of mintosd (daemon/helpers.c). */
+// uses: tools/mintosd_helpers.c
+/* Host tests for the pure parts of mintosd (tools/mintosd_helpers.c). */
 #include "check.h"
-#include "../../daemon/helpers.h"
+#include "../../tools/mintosd_helpers.h"
 #include <string.h>
 
 int main(void) {
