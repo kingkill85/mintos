@@ -21,11 +21,13 @@ static const int COUNT[GO_N] = {4, 5, 2};
  * file passed in, and gameopt_count/choice use the last one read. */
 #define MAXFRAMES 24
 static char fr_label[MAXFRAMES][96];
+static bool fr_drawn[MAXFRAMES];   /* drawn around the picture (@style) instead of a PNG */
 static int fr_n, fr_default;   /* fr_default: systems.cfg sets an overlay -> "Standard" first */
+static bool sys_crt, sys_full;   /* systems.cfg: crt = yes; its Bild fills the screen */
 
 static void add_label(void *a, const char *k, const char *v) {
-    (void)a; (void)v;
-    if (fr_n < MAXFRAMES) snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", k);
+    (void)a;
+    if (fr_n < MAXFRAMES) { fr_drawn[fr_n] = v[0] == '@'; snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", k); }
 }
 
 /* any cfg path in the rgarch directory (systems.cfg or user.cfg) -> that directory's files */
@@ -39,13 +41,27 @@ static void frames_for(const char *cfg, const char *system) {
     fr_n = 0;
     fr_default = !config_get(sys, system, "overlay", v, sizeof v) && *v && strcmp(v, "none");
     config_each(frames, system, add_label, NULL);
-    for (int i = 0; i < 2 && fr_n < MAXFRAMES; i++) snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", CONFIG_PLAIN[i]);
+    for (int i = 0; i < 2 && fr_n < MAXFRAMES; i++) {
+        fr_drawn[fr_n] = true;
+        snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", CONFIG_PLAIN[i]);
+    }
+    sys_crt = !config_get(sys, system, "crt", v, sizeof v) && !strcmp(v, "yes");
+    if (config_get(sys, system, "scale", v, sizeof v) && config_get(sys, "default", "scale", v, sizeof v)) v[0] = 0;
+    sys_full = !strcmp(v, "full");
 }
 
 static int frame_count(void) { return fr_default + 1 + fr_n; }
 
+#define F_SCANLINES 4   /* VAL[GO_FILTER] */
+#define S_INTEGER 1     /* VAL[GO_SCALE] */
+#define S_FULL 3
+
 const char *gameopt_label(GameOpt o) { return LABEL[o]; }
-int gameopt_count(GameOpt o) { return o == GO_FRAME ? frame_count() : COUNT[o]; }
+int gameopt_count(GameOpt o) {
+    if (o == GO_FRAME) return frame_count();
+    if (o == GO_FILTER && !sys_crt) return F_SCANLINES;   /* Scanlines only for TV/arcade systems */
+    return COUNT[o];
+}
 
 const char *gameopt_choice(GameOpt o, int i) {
     if (o != GO_FRAME) return i >= 0 && i < COUNT[o] ? TXT[o][i] : "";
@@ -85,25 +101,55 @@ static int frame_set(const char *user, const char *system, int i) {
 }
 
 int gameopt_get(const char *user, const char *system, GameOpt o) {
+    frames_for(user, system);   /* this system's frames and kind, for count/choice */
     if (o == GO_FRAME) return frame_get(user, system);
     char v[64];
     if (config_get(user, system, KEY[o], v, sizeof v)) return 0;
-    for (int i = 1; i < COUNT[o]; i++) if (!strcmp(v, VAL[o][i])) return i;
+    for (int i = 1; i < gameopt_count(o); i++) if (!strcmp(v, VAL[o][i])) return i;
     return 0;
 }
 
-#define F_SCANLINES 4   /* VAL[GO_FILTER] */
-#define S_INTEGER 1     /* VAL[GO_SCALE] */
+/* what a Rahmen choice is: 'n' none, 'p' a PNG frame (it places the picture), 'd' drawn */
+static char frame_kind(int i) {
+    if (fr_default && i == 0) return 'p';
+    if (i <= fr_default) return 'n';
+    i -= fr_default + 1;
+    return i < fr_n ? (fr_drawn[i] ? 'd' : 'p') : 'n';
+}
 
-/* Scanlines need whole screen rows per game row: choosing them also sets Bild to Ganzzahlig,
- * leaving them sets Bild back to Standard */
-int gameopt_set(const char *user, const char *system, GameOpt o, int i) {
+static int set_raw(const char *user, const char *system, GameOpt o, int i) {
     if (o == GO_FRAME) return frame_set(user, system, i);
-    int was = o == GO_FILTER ? gameopt_get(user, system, GO_FILTER) : -1;
-    int r = config_set(user, system, KEY[o], i > 0 && i < COUNT[o] ? VAL[o][i] : NULL);
-    if (o == GO_FILTER && i == F_SCANLINES && was != F_SCANLINES)
-        r |= config_set(user, system, KEY[GO_SCALE], VAL[GO_SCALE][S_INTEGER]);
-    else if (o == GO_FILTER && was == F_SCANLINES && i != F_SCANLINES)
-        r |= config_set(user, system, KEY[GO_SCALE], NULL);
+    return config_set(user, system, KEY[o], i > 0 && i < COUNT[o] ? VAL[o][i] : NULL);
+}
+
+/* The options depend on each other; a choice adjusts the others so they never contradict:
+ *  - Scanlines need Ganzzahlig: choosing them sets Bild to Ganzzahlig, leaving them sets Bild
+ *    back to Standard (unless a drawn frame still needs the border); another Bild ends them.
+ *  - a PNG frame places the picture in its window: choosing one sets Bild to Standard;
+ *    another Bild turns it off.
+ *  - a drawn frame needs a border: choosing one when Bild fills the screen sets Ganzzahlig;
+ *    Vollbild (or a full-screen Standard) turns it off. */
+int gameopt_set(const char *user, const char *system, GameOpt o, int i) {
+    int scale = gameopt_get(user, system, GO_SCALE), filter = gameopt_get(user, system, GO_FILTER);
+    char kind = frame_kind(gameopt_get(user, system, GO_FRAME));
+    int r = set_raw(user, system, o, i);
+    if (o == GO_FILTER) {
+        if (i == F_SCANLINES && filter != F_SCANLINES) {
+            r |= set_raw(user, system, GO_SCALE, S_INTEGER);
+            if (kind == 'p') r |= set_raw(user, system, GO_FRAME, fr_default);   /* Aus */
+        } else if (filter == F_SCANLINES && i != F_SCANLINES && kind != 'd')
+            r |= set_raw(user, system, GO_SCALE, 0);
+    } else if (o == GO_SCALE) {
+        int full = i == S_FULL || (i == 0 && sys_full);
+        if (filter == F_SCANLINES && i != S_INTEGER) r |= set_raw(user, system, GO_FILTER, 0);
+        if ((kind == 'p' && i != 0) || (kind == 'd' && full)) r |= set_raw(user, system, GO_FRAME, fr_default);
+    } else if (o == GO_FRAME) {
+        char k = frame_kind(i);
+        if (k == 'p') {
+            r |= set_raw(user, system, GO_SCALE, 0);
+            if (filter == F_SCANLINES) r |= set_raw(user, system, GO_FILTER, 0);
+        } else if (k == 'd' && (scale == S_FULL || (scale == 0 && sys_full)))
+            r |= set_raw(user, system, GO_SCALE, S_INTEGER);
+    }
     return r;
 }

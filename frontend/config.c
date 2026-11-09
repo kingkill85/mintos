@@ -23,6 +23,8 @@ static void apply(SystemCfg *c, const char *key, const char *val) {
             c->scale = SCALE_CUSTOM;
         else
             c->scale = !strcmp(val, "aspect") ? SCALE_ASPECT : !strcmp(val, "full") ? SCALE_FULL : SCALE_INTEGER;
+    } else if (!strcmp(key, "crt")) {
+        c->crt = !strcmp(val, "yes");
     } else if (!strcmp(key, "overlay")) {
         if (!strcmp(val, "none")) { c->overlay[0] = 0; return; }
         snprintf(c->overlay, sizeof c->overlay, "%s%s", *val && *val != '/' ? OVERLAY_DIR : "", val);
@@ -136,6 +138,14 @@ static int style_index(const char *name) {
 int config_border_style(const char *label) {
     for (int i = 0; i < 2; i++) if (!strcmp(label, CONFIG_PLAIN[i])) return i + 1;   /* schwarz, grau */
     return 0;
+}
+
+void config_finish(SystemCfg *c, int sw, int sh) {
+    if (c->filter == FILTER_SCANLINES && !c->crt) c->filter = FILTER_SHARP;
+    if (c->scale == SCALE_CUSTOM && !c->overlay[0]) {   /* GBC without its frame: centred, same size */
+        c->cx = (sw - c->cw) / 2;
+        c->cy = (sh - c->ch) / 2;
+    }
 }
 
 int config_each(const char *file, const char *section, void (*fn)(void *, const char *, const char *), void *arg) {

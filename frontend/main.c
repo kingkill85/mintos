@@ -58,6 +58,7 @@ static int load_cfg(void) {
     char fr[1024];
     snprintf(fr, sizeof fr, "%s%s", root(), FRAMES_FILE);
     config_frame(fr, p, sysname, &cfg);
+    config_finish(&cfg, 640, 480);
     return r;
 }
 
@@ -67,7 +68,10 @@ static void apply_option(Menu *m) {
     char p[1024];
     snprintf(p, sizeof p, "%s%s", root(), USER_CONFIG_FILE);
     gameopt_set(p, sysname, (GameOpt)m->changed, m->val[m->changed]);
-    m->val[MO_SCALE] = gameopt_get(p, sysname, GO_SCALE);   /* Scanlines change Bild too */
+    /* one option can change the others (gameopts.c): show what is set now */
+    m->val[MO_SCALE] = gameopt_get(p, sysname, GO_SCALE);
+    m->val[MO_FILTER] = gameopt_get(p, sysname, GO_FILTER);
+    m->val[MO_FRAME] = gameopt_get(p, sysname, GO_FRAME);
     load_cfg();
 }
 

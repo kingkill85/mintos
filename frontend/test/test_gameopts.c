@@ -20,11 +20,12 @@ int main(void) {
     snprintf(user, sizeof user, "%s/user.cfg", dir);
     snprintf(frames, sizeof frames, "%s/frames.cfg", dir);
     FILE *f = fopen(sys, "w");
-    fputs("[default]\nscale = integer\n[gbc]\nscale = custom 80 12 480 432\noverlay = rgc/J.png\n[nes]\nscale = full\n[gb]\n", f);
+    fputs("[default]\nscale = integer\n[gbc]\nscale = custom 80 12 480 432\noverlay = rgc/J.png\n[nes]\nscale = full\n[gb]\n"
+          "[snes]\nscale = full\ncrt = yes\n", f);
     fclose(f);
     f = fopen(frames, "w");
     fputs("[gbc]\nJeltron = rgc/J.png 80 12 480 432\nGBC Raster = GB-GBC/GBC_grid.png 80 24 480 432\n"
-          "[nes]\nNES 1 = tv/nes-1.png 64 0 512 480\n[md]\nRot = @schwarz-rot\nKaputt = @gibtsnicht\n", f);
+          "[nes]\nNES 1 = tv/nes-1.png 64 0 512 480\n[md]\nRot = @schwarz-rot\nKaputt = @gibtsnicht\n[snes]\nSNES schwarz = @snes-schwarz\n", f);
     fclose(f);
 
     CHECK_STR(gameopt_label(GO_SCALE), "Bild");
@@ -126,12 +127,64 @@ int main(void) {
     CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 4), 0);
     CHECK_STR(gameopt_choice(GO_FILTER, 4), "Scanlines");
     CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 1);
-    CHECK_INT(gameopt_set(user, "snes", GO_SCALE, 3), 0);          /* changing Bild by hand afterwards sticks */
     CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 4), 0);         /* same filter again: Bild untouched */
-    CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 3);
+    CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 1);
     CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 2), 0);
     CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 0);
     CHECK_INT(gameopt_get(user, "snes", GO_FILTER), 2);
+    /* the rules that keep Bild, Filter and Rahmen consistent */
+    {
+        unlink(user);
+        SystemCfg d;
+        /* Scanlines only where crt = yes */
+        gameopt_get(user, "gbc", GO_FILTER);
+        CHECK_INT(gameopt_count(GO_FILTER), 4);
+        gameopt_get(user, "snes", GO_FILTER);
+        CHECK_INT(gameopt_count(GO_FILTER), 5);
+        /* a drawn frame on a full-screen system brings Ganzzahlig (else it would be invisible) */
+        CHECK_INT(gameopt_set(user, "snes", GO_FRAME, 1), 0);   /* SNES schwarz */
+        CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 1);
+        /* Vollbild leaves no border: the drawn frame goes off */
+        CHECK_INT(gameopt_set(user, "snes", GO_SCALE, 3), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_FRAME), 0);
+        /* Standard Bild of snes is full screen as well */
+        CHECK_INT(gameopt_set(user, "snes", GO_FRAME, 1), 0);
+        CHECK_INT(gameopt_set(user, "snes", GO_SCALE, 0), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_FRAME), 0);
+        /* Seitenverhaeltnis keeps a drawn frame */
+        CHECK_INT(gameopt_set(user, "snes", GO_FRAME, 1), 0);
+        CHECK_INT(gameopt_set(user, "snes", GO_SCALE, 2), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_FRAME), 1);
+        /* Scanlines: Ganzzahlig; another Bild ends them */
+        CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 4), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 1);
+        CHECK_INT(gameopt_set(user, "snes", GO_SCALE, 2), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_FILTER), 0);
+        /* leaving Scanlines keeps Ganzzahlig while a drawn frame needs the border */
+        CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 4), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_FRAME), 1);
+        CHECK_INT(gameopt_set(user, "snes", GO_FILTER, 2), 0);
+        CHECK_INT(gameopt_get(user, "snes", GO_SCALE), 1);
+        /* a PNG frame places the picture: Bild back to Standard; another Bild turns it off */
+        CHECK_INT(gameopt_set(user, "gbc", GO_SCALE, 3), 0);
+        CHECK_INT(gameopt_set(user, "gbc", GO_FRAME, 3), 0);   /* GBC Raster */
+        CHECK_INT(gameopt_get(user, "gbc", GO_SCALE), 0);
+        CHECK_INT(gameopt_set(user, "gbc", GO_SCALE, 1), 0);
+        CHECK_INT(gameopt_get(user, "gbc", GO_FRAME), 1);      /* Aus */
+        /* Standard frame (systems.cfg's PNG) counts as a PNG frame too */
+        CHECK_INT(gameopt_set(user, "gbc", GO_FRAME, 0), 0);
+        CHECK_INT(gameopt_get(user, "gbc", GO_SCALE), 0);
+        /* frame off: the frame's position is dropped, the picture is centred */
+        CHECK_INT(gameopt_set(user, "gbc", GO_FRAME, 1), 0);
+        load("gbc", &d);
+        config_finish(&d, 640, 480);
+        CHECK_INT(d.cx, 80); CHECK_INT(d.cy, 24); CHECK_INT(d.ch, 432);
+        /* Scanlines from an old user.cfg on a handheld are not used */
+        config_set(user, "gbc", "filter", "scanlines");
+        load("gbc", &d);
+        config_finish(&d, 640, 480);
+        CHECK(d.filter != FILTER_SCANLINES);
+    }
     unlink(sys); unlink(user); unlink(frames); rmdir(dir);
     TEST_END();
 }

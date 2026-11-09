@@ -10,6 +10,7 @@ typedef struct {
     int cx, cy, cw, ch;   /* SCALE_CUSTOM rectangle on the 640x480 screen */
     Filter filter;
     char overlay[256];    /* absolute PNG path, "" for none */
+    int crt;              /* systems.cfg crt = yes: TV/arcade, Scanlines allowed */
     int border;           /* drawn frame around the picture: 0 none, else 1 + index in config_border() */
 } SystemCfg;
 
@@ -44,4 +45,7 @@ typedef struct { const char *name; unsigned base, edge, accent; int dots; } Bord
 extern const char *const CONFIG_PLAIN[2];
 const BorderStyle *config_border(int border);   /* SystemCfg.border -> style, NULL for 0/unknown */
 int config_border_style(const char *label);     /* a CONFIG_PLAIN label -> border, else 0 */
+/* after systems.cfg, user.cfg and the frame: Scanlines only on crt systems; a picture whose
+ * position belonged to a frame that is off gets centred */
+void config_finish(SystemCfg *c, int sw, int sh);
 void config_frame(const char *frames_file, const char *user_file, const char *system, SystemCfg *c);
