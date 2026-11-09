@@ -277,8 +277,9 @@ static void draw(const char *status) {
     if (status) {
         ui_text(&ui, ui.small, status, PAD + 4, ui.h - PAD - HINT / 2, UI_WHITE, ui.w - 2 * PAD);
     } else {
-        const char *power[][2] = {{"POWER", "AUS"}};
-        ui_hints(&ui, PAD, 0, power, 1);
+        /* in a game list "B ZURÜCK A STARTEN" leaves no room for the power hint */
+        const char *power[][2] = {{"POWER", "AUS"}, {"F", "EINSTELLUNGEN"}};
+        ui_hints(&ui, PAD, 0, level ? power + 1 : power, level ? 1 : 2);
         const char *both[][2] = {{"B", "ZURÜCK"}, {"A", a ? a : ""}};
         if (level && a) ui_hints(&ui, 0, ui.w - PAD, both, 2);
         else if (level) ui_hints(&ui, 0, ui.w - PAD, both, 1);
