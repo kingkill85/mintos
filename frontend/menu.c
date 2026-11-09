@@ -8,6 +8,7 @@ void menu_init(Menu *m, bool can_state, int last_slot, bool game_menu) {
     m->items[m->nitems++] = M_CONTINUE;
     if (can_state) { m->items[m->nitems++] = M_SAVE; m->items[m->nitems++] = M_LOAD; }
     else if (game_menu) m->items[m->nitems++] = M_GAMEMENU;
+    m->items[m->nitems++] = M_RESET;   /* needs a second A: it ends the current game */
     m->items[m->nitems++] = M_QUIT;
 }
 
@@ -86,7 +87,14 @@ void menu_failed(Menu *m, MenuAction a) {
 
 MenuAction menu_key(Menu *m, int id) {
     m->msg = NULL;
+    bool armed = m->armed;
+    m->armed = false;
     if (m->page) return opt_key(m, id);
+    if (id == RETRO_DEVICE_ID_JOYPAD_A && m->items[m->sel] == M_RESET && !armed) {
+        m->armed = true;
+        m->msg = "Nochmal A: Spiel neu starten";
+        return M_NONE;
+    }
     if (id == RETRO_DEVICE_ID_JOYPAD_A && m->items[m->sel] == M_OPTIONS) { m->page = true; m->osel = 0; return M_NONE; }
     switch (id) {
     case RETRO_DEVICE_ID_JOYPAD_UP: m->sel = (m->sel + m->nitems - 1) % m->nitems; break;
@@ -106,6 +114,7 @@ const char *menu_label(MenuAction a) {
     case M_LOAD: return "Laden";
     case M_GAMEMENU: return "ScummVM-Menü";
     case M_OPTIONS: return "Optionen";
+    case M_RESET: return "Neustart";
     case M_QUIT: return "Beenden";
     default: return "";
     }

@@ -9,14 +9,14 @@ int main(void) {
     menu_init(&m, true, 0, false);
     int vals[MO_N] = {0, 2, 0, 5};
     menu_set_options(&m, true, vals);
-    /* "Optionen" before Beenden */
-    CHECK_INT(m.nitems, 5);
-    CHECK_INT(m.items[3], M_OPTIONS);
-    CHECK_INT(m.items[4], M_QUIT);
-    CHECK_STR(menu_item_text(&m, 3), "Optionen");
+    /* "Optionen" before Beenden (after Neustart) */
+    CHECK_INT(m.nitems, 6);
+    CHECK_INT(m.items[3], M_RESET); CHECK_INT(m.items[4], M_OPTIONS);
+    CHECK_INT(m.items[5], M_QUIT);
+    CHECK_STR(menu_item_text(&m, 4), "Optionen");
 
     /* A opens the page: Bild, Filter, Rahmen, Helligkeit */
-    m.sel = 3;
+    m.sel = 4;
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A), M_NONE);
     CHECK(m.page);
     CHECK_INT(m.nopts, 4);
@@ -42,13 +42,13 @@ int main(void) {
     /* B goes back to the main list (not to the game) */
     CHECK_INT(menu_key(&m, RETRO_DEVICE_ID_JOYPAD_B), M_NONE);
     CHECK(!m.page);
-    CHECK_INT(m.sel, 3);
+    CHECK_INT(m.sel, 4);
 
     /* without a frame in systems.cfg there is no Rahmen line */
     menu_init(&m, false, 0, false);
     menu_set_options(&m, false, vals);
-    CHECK_INT(m.items[1], M_OPTIONS);
-    m.sel = 1;
+    CHECK_INT(m.items[2], M_OPTIONS);
+    m.sel = 2;
     menu_key(&m, RETRO_DEVICE_ID_JOYPAD_A);
     CHECK_INT(m.nopts, 3);
     CHECK_INT(m.opts[2], MO_BRIGHT);

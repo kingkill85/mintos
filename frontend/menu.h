@@ -1,10 +1,10 @@
-/* MinUI in-game menu: Weiter / Speichern / Laden / Beenden, 9 slots with preview. */
+/* MinUI in-game menu: Weiter / Speichern / Laden / Neustart / Beenden, 9 slots with preview. */
 #pragma once
 #include <stdbool.h>
 #include "ui.h"
 #include "libretro.h"
 
-typedef enum { M_NONE, M_CONTINUE, M_SAVE, M_LOAD, M_GAMEMENU, M_DISC, M_OPTIONS, M_QUIT, M_OPTION } MenuAction;
+typedef enum { M_NONE, M_CONTINUE, M_SAVE, M_LOAD, M_GAMEMENU, M_DISC, M_OPTIONS, M_RESET, M_QUIT, M_OPTION } MenuAction;
 /* options page lines; MO_SCALE..MO_FRAME are GameOpt values */
 typedef enum { MO_SCALE, MO_FILTER, MO_FRAME, MO_BRIGHT, MO_N } MenuOpt;
 
@@ -13,6 +13,7 @@ typedef struct {
     bool can_state;
     MenuAction items[8];
     const char *msg;   /* "Speichern fehlgeschlagen" etc., cleared by the next key */
+    bool armed;        /* Neustart pressed once: the next A confirms */
     unsigned discs, disc;   /* multi-disc games */
     char text[48];
     bool page;                 /* options page open */

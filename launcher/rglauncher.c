@@ -10,6 +10,7 @@
 #include "../common/settings.h"
 #include "../common/osd.h"
 #include <dirent.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,7 @@
 #define FONT2 CONF "/fonts/VarelaRound-Regular.ttf"
 #define MAXE 2048
 #define MAXRECENT 12
+#define MAXFAV 200
 
 typedef struct { const char *dir, *name, *exts; } Sys;
 static const Sys SYSTEMS[] = {
@@ -72,7 +74,7 @@ static const Sys SYSTEMS[] = {
 #define NSYS (int)(sizeof SYSTEMS / sizeof *SYSTEMS)
 
 /* ---------- entries ---------- */
-enum { K_GAME, K_SYSTEM, K_RECENT };
+enum { K_GAME, K_SYSTEM, K_RECENT, K_FAV };
 typedef struct { int kind, sys; char label[128]; char path[512]; } Entry;
 
 static Entry games[MAXE];   /* current game list */
@@ -148,13 +150,13 @@ static void load_system(int sys) {
     qsort(games, ngames, sizeof *games, cmp_label);
 }
 
-/* recent: one "sys<TAB>path" per line, newest first */
-static void load_recent(void) {
+/* recent and favorites: one "sys<TAB>path" per line, newest first */
+static void load_list(const char *file, int max) {
     ngames = 0;
-    FILE *f = fopen(CONF "/recent", "r");
+    FILE *f = fopen(file, "r");
     if (!f) return;
     char line[600];
-    while (ngames < MAXRECENT && fgets(line, sizeof line, f)) {
+    while (ngames < max && fgets(line, sizeof line, f)) {
         line[strcspn(line, "\n")] = 0;
         char *tab = strchr(line, '\t');
         if (!tab) continue;
@@ -171,6 +173,52 @@ static void load_recent(void) {
             }
     }
     fclose(f);
+}
+static void load_recent(void) { load_list(CONF "/recent", MAXRECENT); }
+
+/* favorites (SELECT on a game, as in MinUI's forks FinUI/MyMinUI): CONF/favorites, newest
+ * first; the paths are kept in memory for the star in the lists */
+#define FAVS CONF "/favorites"
+static char favs[MAXFAV][512];
+static int nfavs;
+
+static void read_favs(void) {
+    nfavs = 0;
+    FILE *f = fopen(FAVS, "r");
+    if (!f) return;
+    char line[600];
+    while (nfavs < MAXFAV && fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\n")] = 0;
+        char *tab = strchr(line, '\t');
+        if (tab) snprintf(favs[nfavs++], sizeof favs[0], "%s", tab + 1);
+    }
+    fclose(f);
+}
+
+static int is_fav(const char *path) {
+    for (int i = 0; i < nfavs; i++) if (!strcmp(favs[i], path)) return 1;
+    return 0;
+}
+
+/* adds the game at the top, or removes it */
+static void toggle_fav(const Entry *g) {
+    char old[MAXFAV][600];
+    int n = 0;
+    FILE *f = fopen(FAVS, "r");
+    if (f) {
+        while (n < MAXFAV && fgets(old[n], sizeof old[n], f)) n++;
+        fclose(f);
+    }
+    char mine[600];
+    snprintf(mine, sizeof mine, "%s\t%s\n", SYSTEMS[g->sys].dir, g->path);
+    int was = is_fav(g->path);
+    f = fopen(FAVS ".tmp", "w");
+    if (!f) return;
+    if (!was) fputs(mine, f);
+    for (int i = 0, w = !was; i < n && w < MAXFAV; i++)
+        if (strcmp(old[i], mine)) { fputs(old[i], f); w++; }
+    if (fclose(f) == 0) rename(FAVS ".tmp", FAVS);
+    read_favs();
 }
 
 static void add_recent(const Entry *g) {
@@ -199,6 +247,11 @@ static void build_root(void) {
         snprintf(root[nroot].label, sizeof root[nroot].label, "Zuletzt gespielt");
         nroot++;
     }
+    if (nfavs) {
+        root[nroot].kind = K_FAV; root[nroot].sys = -1;
+        snprintf(root[nroot].label, sizeof root[nroot].label, "Favoriten");
+        nroot++;
+    }
     for (int s = 0; s < NSYS; s++)
         if (count_games(s)) {
             root[nroot].kind = K_SYSTEM; root[nroot].sys = s;
@@ -224,7 +277,7 @@ static char title[64];
 static int in_settings;   /* the F key shows the settings pages over the list */
 static int saved_level, saved_sel, saved_top;   /* where F was pressed */
 
-/* header: where we are (dark pill, top left), position "3/41", battery */
+/* header: where we are (dark pill, top left), position "3/41" (n > 0: game lists only), battery */
 static void draw_header(const char *where, int pos, int n) {
     int right = ui_status(&ui) - 14;
     if (n > 0) {
@@ -237,6 +290,24 @@ static void draw_header(const char *where, int pos, int n) {
     ui_title(&ui, where, right - PAD);
 }
 
+/* favorite mark: a filled five-pointed star (the fonts have no ★) of outer radius r */
+#define STAR_W 30
+static void draw_star(int cx, int cy, int r, SDL_Color c) {
+    SDL_Vertex v[11];
+    SDL_FPoint p[10];
+    for (int k = 0; k < 10; k++) {
+        float a = -M_PI / 2 + k * M_PI / 5, rr = k % 2 ? r * 0.42f : r;
+        p[k] = (SDL_FPoint){cx + rr * cosf(a), cy + 1 + rr * sinf(a)};
+    }
+    int idx[30];
+    v[10] = (SDL_Vertex){{cx, cy + 1}, c, {0, 0}};
+    for (int k = 0; k < 10; k++) {
+        v[k] = (SDL_Vertex){p[k], c, {0, 0}};
+        idx[3 * k] = 10; idx[3 * k + 1] = k; idx[3 * k + 2] = (k + 1) % 10;
+    }
+    SDL_RenderGeometry(ui.ren, NULL, v, 11, idx, 30);
+}
+
 #define LIST_Y (PAD + HINT + 16)
 #define ROWS ((ui.h - LIST_Y - PAD - HINT - 10) / PILL)
 
@@ -245,8 +316,9 @@ static void draw(const char *status) {
     SDL_RenderClear(ui.ren);
 
     const char *a = NULL;
+    int on_game = 0;
     if (in_settings) {
-        draw_header(settings_title(), settings_sel(), settings_count());
+        draw_header(settings_title(), 0, 0);   /* the counter only where games are */
         settings_draw(&ui, LIST_Y, ROWS);
         if (!status) status = settings_status();
         if (!status) { settings_hints(&ui); osd_draw(&ui); SDL_RenderPresent(ui.ren); return; }
@@ -254,7 +326,7 @@ static void draw(const char *status) {
         Entry *list = level ? games : root;
         int n = level ? ngames : nroot;
         int y0 = LIST_Y, rows = ROWS;
-        draw_header(level ? title : "MintOS", sel, n);
+        draw_header(level ? title : "MintOS", sel, level ? n : 0);
         if (sel < top) top = sel;
         if (sel >= top + rows) top = sel - rows + 1;
         if (n == 0) ui_text(&ui, ui.big, "Keine Spiele", PAD + 24, y0 + PILL / 2, UI_GRAY, ui.w);
@@ -263,15 +335,19 @@ static void draw(const char *status) {
             int maxw = ui.w - 2 * PAD - 48;
             Entry *e = &list[i];
             SDL_Color fg = UI_WHITE;
+            int fav = e->kind == K_GAME && is_fav(e->path);
+            if (fav) maxw -= STAR_W;   /* the star follows the name */
             if (i == sel) {
                 int tw = ui_text_w(ui.big, e->label);
-                ui_pill(&ui, PAD, y, (tw < maxw ? tw : maxw) + 48, PILL, UI_WHITE);
+                ui_pill(&ui, PAD, y, (tw < maxw ? tw : maxw) + 48 + (fav ? STAR_W : 0), PILL, UI_WHITE);
                 fg = UI_BLACK;
             }
-            ui_text(&ui, ui.big, e->label, PAD + 24, y + PILL / 2, fg, maxw);
+            int tw = ui_text(&ui, ui.big, e->label, PAD + 24, y + PILL / 2, fg, maxw);
+            if (fav) draw_star(PAD + 24 + tw + STAR_W / 2 + 2, y + PILL / 2, 11, fg);
         }
         Entry *e = n ? &list[sel] : NULL;
         a = !e ? NULL : e->kind == K_GAME ? "STARTEN" : "ÖFFNEN";
+        on_game = level && e && e->kind == K_GAME;
     }
 
     if (status) {
@@ -280,7 +356,11 @@ static void draw(const char *status) {
         const char *power[][2] = {{"POWER", "AUS"}, {"F", "EINST."}};   /* short: fits next to B/A in game lists */
         ui_hints(&ui, PAD, 0, power, 2);
         const char *both[][2] = {{"B", "ZURÜCK"}, {"A", a ? a : ""}};
-        if (level && a) ui_hints(&ui, 0, ui.w - PAD, both, 2);
+        /* on a game X starts it from the beginning; B ZURÜCK makes way (B+X+A next to POWER and F
+         * is 682 px, X+A 538 of the 600) */
+        const char *game[][2] = {{"X", "NEU"}, {"A", a ? a : ""}};
+        if (on_game) ui_hints(&ui, 0, ui.w - PAD, game, 2);
+        else if (level && a) ui_hints(&ui, 0, ui.w - PAD, both, 2);
         else if (level) ui_hints(&ui, 0, ui.w - PAD, both, 1);
         else if (a) ui_hints(&ui, 0, ui.w - PAD, both + 1, 1);
     }
@@ -339,6 +419,7 @@ static void open_entry(int i) {
     root_sel = i;
     level = 1;
     if (e->kind == K_RECENT) { load_recent(); snprintf(title, sizeof title, "Zuletzt gespielt"); }
+    else if (e->kind == K_FAV) { load_list(FAVS, MAXFAV); snprintf(title, sizeof title, "Favoriten"); }
     else { load_system(e->sys); snprintf(title, sizeof title, "%s", e->label); }
     root_sel = i;
     level = 1;
@@ -396,6 +477,7 @@ int main(void) {
     /* before touching the display: opening and at once closing KMS left the panel black */
     resume_game();
     if (ui_fonts(&ui, FONT, FONT2) < 0 || open_video() < 0) { fprintf(stderr, "init: %s\n", SDL_GetError()); return 1; }
+    read_favs();
     build_root();
     load_state();
     Uint32 held_since = 0, last_rep = 0, last_draw = 0, last_input = SDL_GetTicks();
@@ -487,6 +569,25 @@ int main(void) {
             } else if (press_b && level) {
                 level = 0; build_root();
                 sel = root_sel < nroot ? root_sel : 0; top = 0;
+            } else if (btn == SDL_CONTROLLER_BUTTON_BACK && level && n && list[sel].kind == K_GAME) {
+                /* SELECT: favorite on/off; the root list gains or loses "Favoriten" */
+                Entry g = list[sel];
+                int rk = root[root_sel].kind, rsys = root[root_sel].sys;
+                toggle_fav(&g);
+                status = is_fav(g.path) ? "Zu Favoriten hinzugefügt" : "Aus Favoriten entfernt";
+                build_root();
+                for (int i = 0; i < nroot; i++)
+                    if (root[i].kind == rk && root[i].sys == rsys) root_sel = i;
+                if (rk == K_FAV) {                     /* in the favorites list itself */
+                    load_list(FAVS, MAXFAV);
+                    if (!ngames) { level = 0; sel = top = 0; }
+                    else if (sel >= ngames) sel = ngames - 1;
+                }
+            } else if (btn == SDL_CONTROLLER_BUTTON_X && level && n && list[sel].kind == K_GAME) {
+                /* X: start from the beginning instead of where it was left */
+                setenv("FRESH", "1", 1);
+                draw("Startet von vorne ...");
+                launch(&list[sel]);
             } else if (press_a && n) {
                 Entry *e = &list[sel];
                 if (e->kind == K_GAME) {

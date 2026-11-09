@@ -1,5 +1,6 @@
 /* rgarch: libretro frontend with a MinUI-style menu (docs/superpowers/specs/2026-11-08-rgarch-design.md).
- *   rgarch [--resume] <system> <rom>
+ *   rgarch [--resume|--fresh] <system> <rom>
+ * A start continues from the auto state (written on every quit); --fresh starts over.
  * Settings from systems.cfg, the core from RetroArch's core folder. F opens the menu.
  * SIGTERM (power key) writes the auto state and SRAM and exits 0.
  * Env (tests): RGARCH_ROOT prefixes paths, RGARCH_CORE overrides the core file,
@@ -9,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <SDL.h>
 #include <SDL_image.h>
 #include "audio.h"
@@ -47,6 +49,10 @@ static bool kstates;
  * protection). This also makes the power-key resume work, which needs savestates otherwise. */
 static char scumm_resume[1024];
 #define SCUMM_SAVE_MS 3000
+/* Neustart in ScummVM: the resume save is gone and rgarch exits with this code; launch.sh then
+ * starts the game again from the beginning (the core has no reset that skips save_slot) */
+#define EXIT_RESTART 3
+static bool restart;
 
 static void send_key(unsigned code, uint16_t mod);
 
@@ -201,6 +207,15 @@ static bool run_menu(int *slot) {
                 open = false;
                 break;
             case M_OPTION: apply_option(&m); break;
+            case M_RESET:
+                if (scumm_resume[0]) {
+                    unlink(scumm_resume);
+                    restart = true;
+                    keep = false;
+                } else core_reset(&core);
+                rg_log("reset%s\n", restart ? " (scummvm: start again)" : "");
+                open = false;
+                break;
             case M_QUIT: open = false; keep = false; break;
             default: break;
             }
@@ -226,12 +241,14 @@ static bool run_menu(int *slot) {
 
 int main(int argc, char **argv) {
     bool resume = argc > 1 && !strcmp(argv[1], "--resume");
-    if (argc - resume < 3) {
-        fprintf(stderr, "usage: rgarch [--resume] <system> <rom>\n");
+    bool fresh = argc > 1 && !strcmp(argv[1], "--fresh");   /* X in the game list */
+    int opt = resume || fresh;
+    if (argc - opt < 3) {
+        fprintf(stderr, "usage: rgarch [--resume|--fresh] <system> <rom>\n");
         return 2;
     }
-    const char *system = sysname = argv[1 + resume];
-    rom = argv[2 + resume];
+    const char *system = sysname = argv[1 + opt];
+    rom = argv[2 + opt];
     signal(SIGTERM, on_term);
     signal(SIGINT, on_term);
 
@@ -290,7 +307,9 @@ int main(int argc, char **argv) {
         }
         /* a resume that fails to load must not be replaced by this fresh start on exit */
         if (first) {
-            if (resume && core.can_state && !state_load(&core, rom, -1)) {
+            /* every start continues where the game was left (Beenden or power key); Neustart in the
+             * menu or --fresh starts over. --resume (rglauncher after a power-off) loads it too. */
+            if (core.can_state && (resume || (!fresh && state_exists(rom, -1))) && !state_load(&core, rom, -1)) {
                 /* keep an unloadable resume point aside instead of losing it on the next power-off */
                 char a[1024], b[1100];
                 if (!path_for(P_AUTO, rom, 0, a, sizeof a)) {
@@ -317,15 +336,16 @@ int main(int argc, char **argv) {
         }
         if (SDL_GetTicks() - last_sram > SRAM_EVERY_MS) { state_sram_save_async(&core, rom); last_sram = SDL_GetTicks(); }
     }
-    /* not before the first frame: that would replace a good resume point with a fresh boot */
-    if (quit_signal && core.can_state && ran) state_save(&core, rom, -1, NULL);
+    /* on every quit (menu or power key), but not before the first frame: that would replace a
+     * good resume point with a fresh boot */
+    if (core.can_state && ran) state_save(&core, rom, -1, NULL);
     /* ScummVM: on every quit (menu or power key), once the game is up */
-    if (scumm_resume[0] && ran && frame > 60) scumm_save_resume();
+    if (scumm_resume[0] && ran && frame > 60 && !restart) scumm_save_resume();
     state_sram_wait();
     state_sram_save(&core, rom);
     audio_close();
     core_unload(&core);
     video_close();
-    rg_log("exit (%s)\n", quit_signal ? "signal" : "menu");
-    return 0;
+    rg_log("exit (%s)\n", quit_signal ? "signal" : restart ? "restart" : "menu");
+    return restart && !quit_signal ? EXIT_RESTART : 0;
 }

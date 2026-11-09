@@ -63,6 +63,22 @@ int main(void) {
     snprintf(cmd, sizeof cmd, "grep -q 'load state -1: ok' '%s/var/log/rgarch.log'", root);
     CHECK_INT(system(cmd), 0);
 
+    /* a plain start continues too (after Beenden): the auto state loads without --resume */
+    pid = start(rom, NULL);
+    usleep(800000);
+    kill(pid, SIGTERM);
+    CHECK_INT(wait_exit(pid), 0);
+    snprintf(cmd, sizeof cmd, "grep -q 'load state -1: ok' '%s/var/log/rgarch.log'", root);   /* log is per run */
+    CHECK_INT(system(cmd), 0);
+
+    /* --fresh (X in the game list) ignores the auto state */
+    pid = start(rom, "--fresh");
+    usleep(800000);
+    kill(pid, SIGTERM);
+    CHECK_INT(wait_exit(pid), 0);
+    snprintf(cmd, sizeof cmd, "grep -q 'load state -1' '%s/var/log/rgarch.log'", root);
+    CHECK(system(cmd) != 0);
+
     /* missing ROM: error page, then exit 1 (timeout instead of a B press) */
     pid = start("/storage/roms/test/missing.tst", NULL);
     CHECK_INT(wait_exit(pid), 1);

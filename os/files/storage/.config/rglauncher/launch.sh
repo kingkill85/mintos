@@ -2,15 +2,17 @@
 # launch.sh <rom> <system>: start a game. Systems with a section in rgarch's systems.cfg run
 # in rgarch (core and settings from there); n64, nds, psp and dreamcast still in RetroArch.
 # RESUME=1 (set by rglauncher after a power-off during a game) continues from the auto state.
-ROM="$1"; SYS="$2"
+# FRESH=1 (X in the game list) starts the game from the beginning instead of where it was left.
+ROM="$1"; SYS="$2"; LIST="$1"
 TITLE=$(basename "$ROM"); TITLE=$(printf "%s" "${TITLE%.*}" | sed "s/ *[([][^])]*[])]//g")   # as in the list
 # for mintosd (power key): which game is running
 printf '%s\t%s\n' "$SYS" "$ROM" > /run/rglauncher-current
 
-if [ "$SYS" = scummvm ]; then
+# ScummVM: prepares ROM and scummvm.ini; again after a Neustart (rgarch exit code 3)
+scumm_prep() {
   # The list holds ROCKNIX-style files: --path="<game dir>" <id>. The ScummVM core wants
   # <game dir>/<id>.scummvm containing the id; it starts the game without ScummVM's GUI.
-  eval "set -- $(cat "$ROM")"
+  eval "set -- $(cat "$LIST")"
   DIR=${1#--path=}; ID=$2
   [ -f "$DIR/$ID.scummvm" ] || echo "$ID" > "$DIR/$ID.scummvm"
   ROM="$DIR/$ID.scummvm"
@@ -18,7 +20,7 @@ if [ "$SYS" = scummvm ]; then
   # game's section of scummvm.ini makes the engine load it at start (the core starts a target
   # that has a section from there; gameid + path suffice, ScummVM adds the rest itself).
   INI=/storage/roms/bios/scummvm.ini
-  SLOT=; [ -f "/storage/saves/scummvm/$ID.s10" ] && SLOT=10
+  SLOT=; [ "$FRESH" != 1 ] && [ -f "/storage/saves/scummvm/$ID.s10" ] && SLOT=10
   case "$ID" in *:*) ;; *)
     touch "$INI"
     awk -v sec="[$ID]" -v gid="$ID" -v dir="$DIR" -v slot="$SLOT" '
@@ -38,12 +40,22 @@ if [ "$SYS" = scummvm ]; then
   # Monkey Island 2: ScummVM accepts any answer to the code wheel; type one automatically
   # (only on a fresh start: loading the resume slot skips the protection)
   [ "$ID" = monkey2 ] && [ -z "$SLOT" ] && /usr/local/sbin/mi2-copyprotect >/dev/null 2>&1 &
-fi
+}
+[ "$SYS" = scummvm ] && scumm_prep
 
 if grep -q "^\[$SYS\]" /storage/.config/rgarch/systems.cfg 2>/dev/null; then
-  echo "$(date +%T) rgarch $SYS rom=$ROM resume=${RESUME:-0}"
+  echo "$(date +%T) rgarch $SYS rom=$ROM resume=${RESUME:-0} fresh=${FRESH:-0}"
   export RGARCH_TITLE="$TITLE"
+  if [ "$SYS" = scummvm ]; then
+    # not exec: Neustart (exit code 3) starts the game again without the resume save
+    A=; [ "$RESUME" = 1 ] && A=--resume; [ "$FRESH" = 1 ] && A=--fresh
+    while /usr/local/bin/rgarch $A "$SYS" "$ROM"; [ $? = 3 ]; do
+      A=; echo "$(date +%T) rgarch $SYS restart"; scumm_prep
+    done
+    exit 0
+  fi
   if [ "$RESUME" = 1 ]; then exec /usr/local/bin/rgarch --resume "$SYS" "$ROM"; fi
+  if [ "$FRESH" = 1 ]; then exec /usr/local/bin/rgarch --fresh "$SYS" "$ROM"; fi
   exec /usr/local/bin/rgarch "$SYS" "$ROM"
 fi
 
