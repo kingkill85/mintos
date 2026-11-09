@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* the built-in pad (rg353-pad's merged uinput device) plus external ones (Bluetooth/USB),
+/* the built-in pad (mintosd's merged uinput device) plus external ones (Bluetooth/USB),
  * all as player 1; the raw built-in devices behind the merged one are left alone */
 static SDL_GameController *pads[8];
 static int npads;

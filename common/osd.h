@@ -1,5 +1,5 @@
 /* On-screen display for volume and brightness changes, the same in rglauncher and rgarch.
- * rg353-audio writes OSD_FILE ("<seq> vol|bright <0..10>") on every change by the volume
+ * mintosd writes OSD_FILE ("<seq> vol|bright <0..10>") on every change by the volume
  * keys (F + volume = brightness); the programs that own the display poll it and draw a bar. */
 #pragma once
 #include "ui.h"

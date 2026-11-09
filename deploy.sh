@@ -6,7 +6,15 @@ cd "$(dirname "$0")"
 HOST=${RG353V:-root@192.168.178.37}
 scp -q build/rglauncher "$HOST:/storage/.config/rglauncher/rglauncher.new"
 scp -q build/rgarch "$HOST:/usr/local/bin/rgarch.new" && ssh "$HOST" 'mv /usr/local/bin/rgarch.new /usr/local/bin/rgarch'
-tar -C os/files --owner=0 --group=0 -cf - storage etc usr | ssh "$HOST" 'tar -C / -xf - && systemctl daemon-reload'
+scp -q build/mintosd "$HOST:/usr/local/sbin/mintosd.new" && ssh "$HOST" 'mv /usr/local/sbin/mintosd.new /usr/local/sbin/mintosd'
+tar -C os/files --owner=0 --group=0 -cf - storage etc usr | ssh "$HOST" 'tar -C / -xf - && systemctl daemon-reload
+  # mintosd replaced the Python daemons rg353-pad/-audio/-power
+  if [ -e /etc/systemd/system/rg353-pad.service ]; then
+    systemctl disable -q --now rg353-pad rg353-audio rg353-power
+    rm -f /usr/local/sbin/rg353-pad /usr/local/sbin/rg353-audio /usr/local/sbin/rg353-power /etc/systemd/system/rg353-pad.service /etc/systemd/system/rg353-audio.service /etc/systemd/system/rg353-power.service
+    systemctl daemon-reload && systemctl enable -q mintosd
+  fi
+  systemctl restart mintosd'
 ssh "$HOST" 'mv /storage/.config/rglauncher/rglauncher.new /storage/.config/rglauncher/rglauncher && sync
   if pgrep -x rgarch >/dev/null || pgrep -x retroarch >/dev/null; then echo "game running: launcher updates when it exits"
   else systemctl restart rglauncher && echo deployed; fi'

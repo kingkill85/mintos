@@ -367,7 +367,7 @@ static void move(int d, int n) {
     sel = (sel + d + n) % n;
 }
 
-/* Garlic-style resume: rg353-power wrote CONF/resume ("<system>\t<rom>") when the power key
+/* Garlic-style resume: mintosd (power key) wrote CONF/resume ("<system>\t<rom>") when the power key
  * switched the device off during a game. Start that game again; RESUME=1 makes launch.sh
  * load RetroArch's auto save state. The file is removed first so a crash cannot loop. */
 static void resume_game(void) {
@@ -413,7 +413,7 @@ int main(void) {
             int btn = -1;
             if (ev.type == SDL_QUIT) return 0;
             if (ev.type == SDL_CONTROLLERDEVICEADDED) SDL_GameControllerOpen(ev.cdevice.which);
-            /* F acts on release, so F + volume (brightness, rg353-audio) does not open the settings */
+            /* F acts on release, so F + volume (brightness, mintosd) does not open the settings */
             if (ev.type == SDL_CONTROLLERBUTTONDOWN && ev.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
                 osd_mark();
                 f_wakes = screen_off;

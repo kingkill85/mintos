@@ -4,7 +4,7 @@
 # RESUME=1 (set by rglauncher after a power-off during a game) continues from the auto state.
 ROM="$1"; SYS="$2"
 TITLE=$(basename "$ROM"); TITLE=$(printf "%s" "${TITLE%.*}" | sed "s/ *[([][^])]*[])]//g")   # as in the list
-# for rg353-power: which game is running
+# for mintosd (power key): which game is running
 printf '%s\t%s\n' "$SYS" "$ROM" > /run/rglauncher-current
 
 if [ "$SYS" = scummvm ]; then

@@ -1,0 +1,13 @@
+[Unit]
+Description=MintOS input/audio/power helper (one gamepad, speaker/headphones, volume keys, power key)
+Before=rglauncher.service
+After=sound.target
+
+[Service]
+ExecStartPre=/sbin/modprobe uinput
+ExecStart=/usr/local/sbin/mintosd
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

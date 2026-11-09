@@ -11,6 +11,8 @@ rm -rf "$ST" && mkdir -p "$ST/root"
 cp -a os/files/. "$ST/root/"
 mkdir -p "$ST/root/storage/.config/rglauncher/fonts" "$ST/root/root/.ssh" "$ST/root/var/lib/iwd" "$ST/root/usr/lib"
 cp build/rglauncher "$ST/root/storage/.config/rglauncher/"
+install -D build/mintosd "$ST/root/usr/local/sbin/mintosd"
+install -D build/rgarch "$ST/root/usr/local/bin/rgarch"
 cp device/fonts/* "$ST/root/storage/.config/rglauncher/fonts/"
 cp ~/.ssh/id_ed25519.pub "$ST/root/root/.ssh/authorized_keys"
 cp -a "$W/out/modules/lib/modules" "$ST/root/usr/lib/"
@@ -64,7 +66,7 @@ depmod -a "$KV"
 echo "MODULES=most" > /etc/initramfs-tools/conf.d/rg353v
 update-initramfs -c -k "$KV" >/dev/null
 cp /boot/initrd.img-"$KV" /boot/initrd.img
-systemctl enable iwd systemd-resolved systemd-timesyncd ssh rglauncher usb-net wifi-check rg353-pad rg353-audio rg353-power no-fbcon bluealsa bt-settings >/dev/null 2>&1
+systemctl enable iwd systemd-resolved systemd-timesyncd ssh rglauncher usb-net wifi-check mintosd no-fbcon bluealsa bt-settings >/dev/null 2>&1
 # bluealsa-aplay plays a phone's music on the handheld (A2DP sink) - not needed for headphones
 systemctl mask bluealsa-aplay >/dev/null 2>&1
 systemctl mask getty@tty1 >/dev/null 2>&1

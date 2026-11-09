@@ -27,4 +27,6 @@ nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev pkg-config --run "
   echo 'built build/rglauncher'
   $CC \$CF -Ifrontend -Icommon \$(ls frontend/*.c common/*.c 2>/dev/null) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -lz -ldl -lm -Wl,--allow-shlib-undefined
   echo 'built build/rgarch'
+  $CC -Wextra daemon/mintosd.c daemon/helpers.c -o build/mintosd -lpthread
+  echo 'built build/mintosd'
 "

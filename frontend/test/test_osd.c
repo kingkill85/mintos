@@ -1,6 +1,6 @@
 // uses: common/osd.c common/ui.c
 // libs: $(pkg-config --libs sdl2 SDL2_ttf)
-/* osd_parse: the line rg353-audio writes to /run/mintos-osd */
+/* osd_parse: the line mintosd writes to /run/mintos-osd */
 #include "check.h"
 #include "osd.h"
 

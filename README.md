@@ -29,23 +29,24 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
   - Both use the DTB with the Wi-Fi SDIO limited to 25 MHz high-speed (SDR50 gave CRC errors).
 - `os/files/`: everything installed on top of Debian: systemd units, iwd, sshd, RetroArch
   config, `launch.sh` (system → core), and helpers:
-  - `rg353-pad`: merges the buttons, the F key and the sticks (separate kernel devices) into
-    one uinput gamepad "RG353V Gamepad".
+  - `mintosd` (C, `daemon/`, ~1.5 MB RAM; replaced three Python daemons of ~60 MB):
+    - merges the buttons, the F key and the sticks (separate kernel devices) into one
+      uinput gamepad "RG353V Gamepad".
+    - speaker/headphone switching (mainline leaves it on headphones), the volume buttons
+      (with F: brightness), and Bluetooth headphones (bluealsa becomes ALSA's default while connected).
+    - power key like Garlic OS. During a game it remembers the game, lets the game write its
+      auto save state and powers off; on the next boot rglauncher starts that game again
+      and loads the state. Outside games it just powers off.
   - `wifi-check`: gets the RTL8821CS up after boot (re-probes the SDIO controller if the card
     was not detected, reloads rtw88 after firmware upload errors) until iwd connects.
-  - `rg353-power`: power key like Garlic OS. During a game it remembers the game, lets
-    RetroArch write its auto save state and powers off; on the next boot rglauncher starts
-    that game again and loads the state. Outside games it just powers off.
   - `no-fbcon`: detaches and blanks the text console, so no kernel text shows between list and game.
-  - `rg353-audio`: speaker/headphone switching (mainline leaves it on headphones), the
-    volume buttons, and Bluetooth headphones (bluealsa becomes ALSA's default while connected).
   - `mintos-wifi`, `mintos-bt`: Wi-Fi (iwd D-Bus) and Bluetooth (bluetoothctl) for the settings.
   - `usb-net`: USB NCM gadget, the device is `10.55.0.2` (PC side `10.55.0.1/24`), SSH works without Wi-Fi.
 - `os/chroot-install.sh`, `os/stage.sh`, `os/flash-sd.sh`: build the root filesystem on the
   device while it runs Android (adb root, no card reader needed) and write it to the SD card.
 - `os/restore-android.sh`: the way back in when the SD's system is unreachable (maskrom ->
   Android on the eMMC -> adb root repairs the SD; the comments list the steps back to SD boot).
-- Host tests: `frontend/test/run.sh` (C) and `python3 -I os/test/test_*.py` (helpers).
+- Host tests: `frontend/test/run.sh` (C, incl. mintosd) and `python3 -I os/test/test_*.py` (helpers).
 
 ## rgarch (games)
 
