@@ -1,5 +1,5 @@
-// uses: frontend/input.c frontend/inputmap.c
-// libs: $(pkg-config --libs sdl2)
+// uses: frontend/input.c frontend/inputmap.c common/osd.c common/ui.c
+// libs: $(pkg-config --libs sdl2 SDL2_ttf)
 /* An external (Bluetooth) controller is used next to the built-in pad, as player 1. */
 #include <string.h>
 #include "check.h"

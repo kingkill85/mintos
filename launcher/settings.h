@@ -15,4 +15,5 @@ int settings_sel(void);
 const char *settings_status(void);   /* "Nochmal A ..." or NULL */
 void settings_hints(Ui *ui);          /* the bottom bar */
 int settings_poll(void);              /* 1 when a background job finished (redraw) */
+void settings_refresh(void);          /* re-read values changed outside (volume keys) */
 void settings_draw(Ui *ui, int y0, int rows);

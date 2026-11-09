@@ -17,6 +17,7 @@
 #include "settings.h"
 #include "input.h"
 #include "menu.h"
+#include "osd.h"
 #include "paths.h"
 #include "state.h"
 #include "ui.h"
@@ -165,6 +166,8 @@ static bool run_menu(int *slot) {
         }
         video_draw(&cfg, aspect(), true);
         menu_draw(&ui, &m, title, menu_on_slot_item(&m) ? pv : NULL);
+        osd_poll();
+        osd_draw(&ui);
         video_flip();
     }
     if (pv) SDL_DestroyTexture(pv);
@@ -246,6 +249,8 @@ int main(int argc, char **argv) {
             first = false;
         }
         video_draw(&cfg, aspect(), false);
+        osd_poll();
+        osd_draw(&ui);
         video_flip();
         Uint32 t_c = SDL_GetTicks();
         audio_wait();

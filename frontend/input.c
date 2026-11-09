@@ -1,4 +1,5 @@
 #include "input.h"
+#include "osd.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -66,10 +67,12 @@ bool input_poll(void) {
         case SDL_CONTROLLERDEVICEADDED: try_open(e.cdevice.which); break;
         case SDL_CONTROLLERDEVICEREMOVED: closed(e.cdevice.which); break;
         case SDL_CONTROLLERBUTTONDOWN:
-            if (e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) menu = true;
+            /* F opens/closes the menu on release, unless F + volume changed the brightness */
+            if (e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) osd_mark();
             else press(map_button(e.cbutton.button));
             break;
         case SDL_CONTROLLERBUTTONUP: {
+            if (e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) { if (!osd_used_since_mark()) menu = true; break; }
             int id = map_button(e.cbutton.button);
             if (id >= 0) held &= ~(1 << id);
             break;

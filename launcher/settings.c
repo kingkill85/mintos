@@ -318,6 +318,8 @@ int settings_poll(void) {
     return 1;
 }
 
+void settings_refresh(void) { if (!kb_on) build(); }
+
 void settings_open(void) {
     page = P_MAIN; sel = 0; confirm = 0; status = NULL; kb_on = 0;
     need_ws = need_bs = need_bl = 1;   /* main page shows the network and the connected device */

@@ -5,6 +5,9 @@
   leaves "Playback Mux" on HP, so the speaker stays silent. The jack state is the ALSA
   card control "Headphones Jack"; changes arrive as SW_HEADPHONE_INSERT events.
 - Volume buttons (gpio-keys-vol) change "Master" in 5 % steps; holding repeats.
+  With F held (BTN_MODE on "RG353V Gamepad") they change the brightness in the 10 steps of
+  the settings instead. Every change goes to /run/mintos-osd ("<seq> vol|bright <0..10>"),
+  which rglauncher and rgarch show as an overlay (common/osd.c).
 - Bluetooth headphones (bluealsa): while one is connected, ALSA's default device points to it
   (/run/mintos/asound-bt.conf, loaded by /etc/asound.conf) and the volume buttons change its
   volume. A game picks the device up when it starts.
@@ -85,7 +88,9 @@ async def bt_watch():
 def bt_volume(d):
     v = bt_volume_parse(run("bluealsa-cli", "volume", bt_current))
     if v is not None:
-        run("bluealsa-cli", "volume", bt_current, str(step(v, d)))
+        v = step(v, d)
+        run("bluealsa-cli", "volume", bt_current, str(v))
+    return v
 
 
 async def jack(dev):
@@ -94,14 +99,85 @@ async def jack(dev):
             route()
 
 
+OSD_FILE = "/run/mintos-osd"
+BACKLIGHT = "/sys/class/backlight/backlight"
+f_held = False
+
+
+def osd(kind, value):
+    """tell rglauncher/rgarch to show the overlay"""
+    import time
+    try:
+        with open(OSD_FILE + ".tmp", "w") as f:
+            f.write("%d %s %d\n" % (time.time_ns(), kind, max(0, min(10, value))))
+        os.replace(OSD_FILE + ".tmp", OSD_FILE)
+    except OSError:
+        pass
+
+
+def bl_step(raw, mx):
+    """as common/settings.c: 10 steps, 1 is the dimmest"""
+    if mx <= 0:
+        return 10
+    return max(1, min(10, (raw * 10 + mx // 2) // mx))
+
+
+def bl_raw(step, mx):
+    return mx * max(1, min(10, step)) // 10
+
+
+def brightness(d):
+    try:
+        mx = int(open(BACKLIGHT + "/max_brightness").read())
+        cur = bl_step(int(open(BACKLIGHT + "/brightness").read()), mx)
+        new = max(1, min(10, cur + d))
+        with open(BACKLIGHT + "/brightness", "w") as f:
+            f.write("%d\n" % bl_raw(new, mx))
+        osd("bright", new)
+    except (OSError, ValueError):
+        pass
+
+
+def master_pct(out):
+    """first "[NN%]" of a Playback line from amixer"""
+    m = re.search(r"Playback.*?\[(\d+)%\]", out)
+    return int(m.group(1)) if m else None
+
+
+async def fkey(dev):
+    global f_held
+    async for ev in dev.async_read_loop():
+        if ev.type == e.EV_KEY and ev.code == e.BTN_MODE:
+            f_held = ev.value != 0
+
+
+async def fkey_find():
+    """rg353-pad creates "RG353V Gamepad" (uinput); it may come up after us"""
+    while True:
+        pad = next((evdev.InputDevice(p) for p in evdev.list_devices()
+                    if evdev.InputDevice(p).name == "RG353V Gamepad"), None)
+        if pad:
+            try:
+                await fkey(pad)
+            except OSError:   # rg353-pad restarted
+                pass
+        await asyncio.sleep(1)
+
+
 async def volume(dev):
     async for ev in dev.async_read_loop():
         if ev.type == e.EV_KEY and ev.value in (1, 2):  # press or autorepeat
             d = 1 if ev.code == e.KEY_VOLUMEUP else -1 if ev.code == e.KEY_VOLUMEDOWN else 0
-            if d and bt_current:
-                bt_volume(d)
+            if d and f_held:
+                brightness(d)
+            elif d and bt_current:
+                v = bt_volume(d)
+                if v is not None:
+                    osd("vol", (v * 10 + 63) // 127)
             elif d:
-                amixer("-q", "sset", "Master", "5%+" if d > 0 else "5%-")
+                v = master_pct(amixer("sset", "Master", "5%+" if d > 0 else "5%-"))
+                if v is not None:
+                    osd("vol", (v + 5) // 10)
 
 
 async def main():
@@ -109,6 +185,7 @@ async def main():
     route()
     tasks = [jack(d) for n, d in devs.items() if n.endswith("Headphones")]
     tasks += [volume(d) for n, d in devs.items() if n == "gpio-keys-vol"]
+    tasks.append(fkey_find())
     tasks.append(bt_watch())
     await asyncio.gather(*tasks)
 

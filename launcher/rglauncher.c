@@ -8,6 +8,7 @@
 #include "ui.h"
 #include "settings.h"
 #include "../common/settings.h"
+#include "../common/osd.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -249,7 +250,7 @@ static void draw(const char *status) {
         draw_header(settings_title(), settings_sel(), settings_count());
         settings_draw(&ui, LIST_Y, ROWS);
         if (!status) status = settings_status();
-        if (!status) { settings_hints(&ui); SDL_RenderPresent(ui.ren); return; }
+        if (!status) { settings_hints(&ui); osd_draw(&ui); SDL_RenderPresent(ui.ren); return; }
     } else {
         Entry *list = level ? games : root;
         int n = level ? ngames : nroot;
@@ -284,6 +285,7 @@ static void draw(const char *status) {
         else if (level) ui_hints(&ui, 0, ui.w - PAD, both, 1);
         else if (a) ui_hints(&ui, 0, ui.w - PAD, both + 1, 1);
     }
+    osd_draw(&ui);
     SDL_RenderPresent(ui.ren);
 }
 
@@ -398,7 +400,7 @@ int main(void) {
     build_root();
     load_state();
     Uint32 held_since = 0, last_rep = 0, last_draw = 0, last_input = SDL_GetTicks();
-    int held = 0, screen_off = 0;
+    int held = 0, screen_off = 0, f_wakes = 0;
     const char *status = NULL;
     bl_power(1);
     /* With KMSDRM the first presented frame after taking over the display (boot, or
@@ -412,8 +414,17 @@ int main(void) {
             int btn = -1;
             if (ev.type == SDL_QUIT) return 0;
             if (ev.type == SDL_CONTROLLERDEVICEADDED) SDL_GameControllerOpen(ev.cdevice.which);
+            /* F acts on release, so F + volume (brightness, rg353-audio) does not open the settings */
+            if (ev.type == SDL_CONTROLLERBUTTONDOWN && ev.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
+                osd_mark();
+                f_wakes = screen_off;
+                if (!screen_off) continue;
+            }
             if (ev.type == SDL_CONTROLLERBUTTONDOWN) btn = ev.cbutton.button;
-            if (ev.type == SDL_CONTROLLERBUTTONUP) { if (ev.cbutton.button == held) held = 0; continue; }
+            if (ev.type == SDL_CONTROLLERBUTTONUP && ev.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
+                if (f_wakes || osd_used_since_mark()) { f_wakes = 0; continue; }
+                btn = SDL_CONTROLLER_BUTTON_GUIDE;
+            } else if (ev.type == SDL_CONTROLLERBUTTONUP) { if (ev.cbutton.button == held) held = 0; continue; }
             if (ev.type == SDL_CONTROLLERAXISMOTION && ev.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
                 int v = ev.caxis.value;
                 if (v > 20000 && held != SDL_CONTROLLER_BUTTON_DPAD_DOWN) btn = SDL_CONTROLLER_BUTTON_DPAD_DOWN;
@@ -491,6 +502,7 @@ int main(void) {
             }
         }
         if (in_settings && settings_poll()) dirty = 1;
+        if (osd_poll()) { dirty = 1; if (in_settings) settings_refresh(); }
         Uint32 now = SDL_GetTicks();
         if (held && now - held_since > 350 && now - last_rep > (in_settings ? 120 : 70)) {
             if (in_settings)

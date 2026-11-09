@@ -1,5 +1,5 @@
-// uses: frontend/input.c frontend/inputmap.c
-// libs: $(pkg-config --libs sdl2)
+// uses: frontend/input.c frontend/inputmap.c common/osd.c common/ui.c
+// libs: $(pkg-config --libs sdl2 SDL2_ttf)
 #include <string.h>
 #include "check.h"
 #include "input.h"
@@ -31,7 +31,9 @@ int main(void) {
     CHECK_INT(input_state(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A), 0);
 
     e.type = SDL_CONTROLLERBUTTONDOWN; e.cbutton.button = SDL_CONTROLLER_BUTTON_GUIDE; SDL_PushEvent(&e);
-    CHECK(input_poll());                                    /* F -> menu */
+    CHECK(!input_poll());                                   /* F down: nothing yet (F + volume = brightness) */
+    e.type = SDL_CONTROLLERBUTTONUP; SDL_PushEvent(&e);
+    CHECK(input_poll());                                    /* F released without volume -> menu */
 
     SDL_Event a;
     memset(&a, 0, sizeof a); a.type = SDL_CONTROLLERAXISMOTION;
