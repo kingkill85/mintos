@@ -30,9 +30,26 @@ int cs_path(char *out, size_t n, const char *fmt, ...) {
 
 /* ---- files ---- */
 
-static void mkdirs(char *p) {  /* mkdir -p of every directory component in p (p is a file path) */
+static void fsync_dir(const char *dir) {
+    int d = open(dir, O_RDONLY | O_DIRECTORY);
+    if (d < 0) return;
+    fsync(d);
+    close(d);
+}
+
+static void fsync_parent(char *p) {  /* fsync the directory containing file path p */
+    char *s = strrchr(p, '/');
+    if (!s || s == p) return;
+    *s = 0; fsync_dir(p); *s = '/';
+}
+
+static void mkdirs(char *p) {  /* mkdir -p of every directory component in p (p is a file path); new dirs are made durable */
     for (char *s = p + 1; *s; s++)
-        if (*s == '/') { *s = 0; mkdir(p, 0755); *s = '/'; }
+        if (*s == '/') {
+            *s = 0;
+            if (mkdir(p, 0755) == 0) { fsync_dir(p); fsync_parent(p); }
+            *s = '/';
+        }
 }
 
 int cs_write(const char *rel, const char *data, size_t len) {
@@ -49,7 +66,10 @@ int cs_write(const char *rel, const char *data, size_t len) {
         if (w <= 0) { close(fd); unlink(tmp); return -1; }
         off += w;
     }
-    if (fsync(fd) || close(fd) || rename(tmp, path)) { unlink(tmp); return -1; }
+    int bad = fsync(fd);
+    if (close(fd)) bad = -1;
+    if (bad || rename(tmp, path)) { unlink(tmp); return -1; }
+    fsync_parent(path);   /* the new dirent must survive power loss too */
     return 0;
 }
 
@@ -136,8 +156,9 @@ int cs_queue_add(unsigned game_id, unsigned ach_id, const char *hash, long when)
     FILE *f = fopen(path, "a");
     if (!f) return -1;
     snprintf(ln, sizeof ln, "%u %ld\n", ach_id, when);
-    int rc = (fputs(ln, f) < 0) ? -1 : 0;
+    int rc = (fputs(ln, f) < 0 || fflush(f) || fsync(fileno(f))) ? -1 : 0;
     if (fclose(f)) rc = -1;
+    fsync_parent(path);
     return rc;
 }
 
