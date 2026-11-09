@@ -116,5 +116,21 @@ int main(void) {
         CHECK(!m.cpage);
         CHECK_INT(m.sel, 4);                              /* Erfolge still selected */
     }
+    /* main-page rows: unchanged up to 7 items, 8 (with Erfolge) must clear the message line */
+    {
+        const int ih = 480, msg_top = ih - PAD - HINT - 30 - 12, hint_top = ih - PAD - HINT;
+        for (int n = 5; n <= 8; n++) {
+            Menu mm;
+            menu_init(&mm, true, 0, false);
+            mm.nitems = n;
+            int step = n > 5 ? 52 : PILL;
+            if (n <= 7) {
+                for (int i = 0; i < n; i++) CHECK_INT(menu_item_y(&mm, i), PAD + HINT + 16 + i * step + (step - PILL) / 2);
+            }
+            if (n == 8) CHECK(menu_item_y(&mm, n - 1) + PILL <= msg_top);   /* 5-7 items already reach the message line: unchanged */
+            if (n != 7) CHECK(menu_item_y(&mm, n - 1) + PILL <= hint_top);   /* 7 items: pill bottom 448, unchanged */
+            CHECK(menu_item_y(&mm, 0) >= PAD + HINT);
+        }
+    }
     TEST_END();
 }

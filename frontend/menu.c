@@ -170,6 +170,10 @@ static void shadow_text(Ui *ui, const char *s, int x, int cy, SDL_Color c, int m
 
 /* geometry from MinUI's menu (minui-menu-gbc.png at 640x480) */
 #define ITEM_Y (PAD + HINT + 16)    /* first item's top, as in the launcher list */
+/* row step: full pills up to 5 items, 52 for 6-7 (Disc wechseln, Optionen), 34 for 8 (with Erfolge)
+ * so the last pill stays above the message line (text centre y = h-PAD-HINT-30) */
+static int menu_item_step(const Menu *m) { return m->nitems > 7 ? 34 : m->nitems > 5 ? 52 : PILL; }
+int menu_item_y(const Menu *m, int i) { int s = menu_item_step(m); return ITEM_Y + i * s + (s - PILL) / 2; }
 #define PV_X 284
 #define PV_Y 100
 #define PV_W 336
@@ -259,11 +263,9 @@ void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     } else if (m->page) {
         draw_options(ui, m);
     } else {
-        /* six items (with Disc wechseln and Optionen) only fit with tighter rows */
-        int step = m->nitems > 5 ? 52 : PILL;
         for (int i = 0; i < m->nitems; i++) {
             const char *s = menu_item_text(m, i);
-            int y = ITEM_Y + i * step + (step - PILL) / 2;
+            int y = menu_item_y(m, i);
             if (i == m->sel) {
                 ui_pill(ui, PAD, y, ui_text_w(ui->big, s) + 48, PILL, UI_WHITE);
                 ui_text(ui, ui->big, s, PAD + 24, y + PILL / 2, UI_BLACK, ui->w);

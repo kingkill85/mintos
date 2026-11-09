@@ -47,6 +47,8 @@ void menu_set_cheevos(Menu *m, bool on);
 void menu_set_cheevo_list(Menu *m, CheevoItem *list, int n);
 #define CHEEVO_ROWS 5          /* rows per page; L/R jump by this */
 const char *menu_cheevo_title(const Menu *m, char *buf, size_t n);   /* "Erfolge x/y" */
+/* top of item i's pill on the main page (rows start at the title bar) */
+int menu_item_y(const Menu *m, int i);
 bool menu_on_slot_item(const Menu *m);    /* Speichern or Laden selected */
 /* draws over whatever is on screen (the dimmed game); preview NULL = empty slot */
 void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview);
