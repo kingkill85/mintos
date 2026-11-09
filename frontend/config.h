@@ -10,7 +10,7 @@ typedef struct {
     int cx, cy, cw, ch;   /* SCALE_CUSTOM rectangle on the 640x480 screen */
     Filter filter;
     char overlay[256];    /* absolute PNG path, "" for none */
-    int border;           /* drawn frame around the picture: 0 none, 1 dark, 2 grey */
+    int border;           /* drawn frame around the picture: 0 none, else 1 + index in config_border() */
 } SystemCfg;
 
 #define CONFIG_FILE "/storage/.config/rgarch/systems.cfg"
@@ -37,7 +37,11 @@ int config_each(const char *file, const char *section, void (*fn)(void *, const 
 int config_frame_parse(const char *val, char *png, int n, int *x, int *y, int *w, int *h);
 /* applies user.cfg's "frame" for system: none = no frame; a label from frames_file = its
  * PNG and picture rectangle (SCALE_CUSTOM); absent = keep systems.cfg's */
-/* the drawn frames every system can use (after the PNG frames in the Rahmen list) */
-extern const char *const CONFIG_BORDERS[2];
-int config_border_style(const char *label);   /* 1/2 for CONFIG_BORDERS, else 0 */
+/* Drawn frames: rgarch paints them around whatever picture the system has, so they never
+ * change its size. frames.cfg uses them as "<label> = @<style>"; every system also gets
+ * the two plain ones (CONFIG_PLAIN) at the end of its Rahmen list. */
+typedef struct { const char *name; unsigned base, edge, accent; int dots; } BorderStyle;   /* 0xRRGGBB, accent 0 = none */
+extern const char *const CONFIG_PLAIN[2];
+const BorderStyle *config_border(int border);   /* SystemCfg.border -> style, NULL for 0/unknown */
+int config_border_style(const char *label);     /* a CONFIG_PLAIN label -> border, else 0 */
 void config_frame(const char *frames_file, const char *user_file, const char *system, SystemCfg *c);

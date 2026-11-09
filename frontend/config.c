@@ -114,10 +114,27 @@ int config_set(const char *file, const char *section, const char *key, const cha
     return rename(tmp, file);
 }
 
-const char *const CONFIG_BORDERS[2] = {"Schlicht schwarz", "Schlicht grau"};
+static const BorderStyle STYLES[] = {
+    {"schwarz", 0x171717, 0x3c3c3c, 0, 0},
+    {"grau", 0xc6c5cb, 0x8f8d99, 0, 0},
+    {"schwarz-rot", 0x141414, 0x3a3a3a, 0xb81d24, 0},
+    {"grau-lila", 0xc6c5cb, 0x8f8d99, 0x5b4a8b, 0},
+    {"snes-schwarz", 0x171717, 0x3c3c3c, 0, 1},
+    {"snes-grau", 0xc6c5cb, 0x8f8d99, 0, 1},
+    {"sfc-hell", 0xd9d8dc, 0xa9a7b1, 0, 1},
+};
+#define NSTYLES (int)(sizeof STYLES / sizeof STYLES[0])
+const char *const CONFIG_PLAIN[2] = {"Schlicht schwarz", "Schlicht grau"};
+
+const BorderStyle *config_border(int border) { return border >= 1 && border <= NSTYLES ? &STYLES[border - 1] : NULL; }
+
+static int style_index(const char *name) {
+    for (int i = 0; i < NSTYLES; i++) if (!strcmp(name, STYLES[i].name)) return i + 1;
+    return 0;
+}
 
 int config_border_style(const char *label) {
-    for (int i = 0; i < 2; i++) if (!strcmp(label, CONFIG_BORDERS[i])) return i + 1;
+    for (int i = 0; i < 2; i++) if (!strcmp(label, CONFIG_PLAIN[i])) return i + 1;   /* schwarz, grau */
     return 0;
 }
 
@@ -139,8 +156,12 @@ void config_frame(const char *frames_file, const char *user_file, const char *sy
     int b = config_border_style(label);
     if (b) { c->overlay[0] = 0; c->border = b; return; }   /* drawn around any picture, keeps its size */
     int x, y, w, h;
-    if (config_get(frames_file, system, label, val, sizeof val)
-        || config_frame_parse(val, png, sizeof png, &x, &y, &w, &h)) return;   /* unknown: keep the default */
+    if (config_get(frames_file, system, label, val, sizeof val)) return;   /* unknown: keep the default */
+    if (val[0] == '@') {
+        if ((b = style_index(val + 1))) { c->overlay[0] = 0; c->border = b; }
+        return;
+    }
+    if (config_frame_parse(val, png, sizeof png, &x, &y, &w, &h)) return;
     snprintf(c->overlay, sizeof c->overlay, "%s%s", OVERLAY_DIR, png);
     c->scale = SCALE_CUSTOM; c->cx = x; c->cy = y; c->cw = w; c->ch = h;
 }

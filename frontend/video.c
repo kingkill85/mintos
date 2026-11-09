@@ -119,12 +119,12 @@ static SDL_FRect picture_rect(const SystemCfg *s, const SDL_Rect *dst) {
     return f;
 }
 
-/* drawn frame ("Schlicht schwarz/grau"): the border gets a colour with light from the top
- * and an edge line around the picture, like os/frames/make-frames.sh */
-static void border_back(int style) {
-    static const SDL_Color base[2] = {{0x17, 0x17, 0x17, 255}, {0xc6, 0xc5, 0xcb, 255}};
-    SDL_Color b = base[style - 1];
-    SDL_SetRenderDrawColor(ren, b.r, b.g, b.b, 255);
+/* drawn frame (config_border): the border gets the style's colour with light from the top,
+ * an edge line around the picture, an optional accent line and the SNES button dots */
+static void set_rgb(unsigned c, Uint8 a) { SDL_SetRenderDrawColor(ren, c >> 16 & 255, c >> 8 & 255, c & 255, a); }
+
+static void border_back(const BorderStyle *b) {
+    set_rgb(b->base, 255);
     SDL_RenderClear(ren);
     if (!shade) {   /* 1x64 gradient: white 10 % at the top to black 18 % at the bottom */
         shade = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, 1, 64);
@@ -132,8 +132,7 @@ static void border_back(int style) {
         Uint32 px[64];
         for (int i = 0; i < 64; i++) {
             float t = i / 63.0f, a = t < 0.36f ? 0.10f * (1 - t / 0.36f) : 0.18f * (t - 0.36f) / 0.64f;
-            Uint32 rgb = t < 0.36f ? 0xffffff : 0;
-            px[i] = (Uint32)(a * 255) << 24 | rgb;
+            px[i] = (Uint32)(a * 255) << 24 | (t < 0.36f ? 0xffffff : 0);
         }
         SDL_UpdateTexture(shade, NULL, px, sizeof px[0]);
         SDL_SetTextureBlendMode(shade, SDL_BLENDMODE_BLEND);
@@ -142,14 +141,31 @@ static void border_back(int style) {
     SDL_RenderCopy(ren, shade, NULL, NULL);
 }
 
-static void border_edge(int style, const SDL_FRect *f) {
-    static const SDL_Color edge[2] = {{0x3c, 0x3c, 0x3c, 255}, {0x8f, 0x8d, 0x99, 255}};
-    SDL_Color e = edge[style - 1];
-    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
-    SDL_SetRenderDrawColor(ren, e.r, e.g, e.b, 255);
-    for (int i = 1; i <= 3; i++) {
+static void ring(const SDL_FRect *f, int from, int to) {
+    for (int i = from; i <= to; i++) {
         SDL_FRect r = {f->x - i, f->y - i, f->w + 2 * i, f->h + 2 * i};
         SDL_RenderDrawRectF(ren, &r);
+    }
+}
+
+static void dot(float cx, float cy, float r, unsigned c) {
+    set_rgb(c, 255);
+    for (float y = -r; y <= r; y += 1) {
+        float hw = sqrtf(r * r - y * y);
+        SDL_RenderDrawLineF(ren, cx - hw, cy + y, cx + hw, cy + y);
+    }
+}
+
+static void border_edge(const BorderStyle *b, const SDL_FRect *f) {
+    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    set_rgb(b->edge, 255);
+    ring(f, 1, 3);
+    float room = f->x < f->y ? f->x : f->y;
+    if (b->accent && room >= 9) { set_rgb(b->accent, 255); ring(f, 6, 7); }
+    if (b->dots && f->x >= 14) {   /* the four button colours, centred in the left border */
+        float cx = f->x / 2, cy = f->y + f->h / 2, d = 5;
+        dot(cx + d, cy, 3, 0xe4202b); dot(cx, cy + d, 3, 0xf6c400);
+        dot(cx - d, cy, 3, 0x1e9a46); dot(cx, cy - d, 3, 0x2b6bd6);
     }
 }
 
@@ -174,10 +190,11 @@ void video_draw(const SystemCfg *s, float aspect, bool dim) {
         SDL_Rect dst = {r.x, r.y, r.w, r.h};
         SDL_FRect f = picture_rect(s, &dst);
         /* a drawn frame needs a border of at least 8 px somewhere */
-        int room = s->border >= 1 && s->border <= 2 && (f.x >= 8 || f.y >= 8);
-        if (room) border_back(s->border);
+        const BorderStyle *bs = config_border(s->border);
+        if (bs && f.x < 8 && f.y < 8) bs = NULL;   /* no room for a frame */
+        if (bs) border_back(bs);
         draw_frame(s, aspect, &dst);
-        if (room) border_edge(s->border, &f);
+        if (bs) border_edge(bs, &f);
     }
     if (strcmp(overlay_path, s->overlay)) {
         if (overlay) SDL_DestroyTexture(overlay);

@@ -39,7 +39,7 @@ static void frames_for(const char *cfg, const char *system) {
     fr_n = 0;
     fr_default = !config_get(sys, system, "overlay", v, sizeof v) && *v && strcmp(v, "none");
     config_each(frames, system, add_label, NULL);
-    for (int i = 0; i < 2 && fr_n < MAXFRAMES; i++) snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", CONFIG_BORDERS[i]);
+    for (int i = 0; i < 2 && fr_n < MAXFRAMES; i++) snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", CONFIG_PLAIN[i]);
 }
 
 static int frame_count(void) { return fr_default + 1 + fr_n; }

@@ -1,4 +1,4 @@
-// uses: frontend/video.c frontend/viewport.c
+// uses: frontend/video.c frontend/viewport.c frontend/config.c
 // libs: $(pkg-config --libs sdl2 SDL2_image) -lm
 #include <string.h>
 #include <stdint.h>

@@ -24,7 +24,7 @@ int main(void) {
     fclose(f);
     f = fopen(frames, "w");
     fputs("[gbc]\nJeltron = rgc/J.png 80 12 480 432\nGBC Raster = GB-GBC/GBC_grid.png 80 24 480 432\n"
-          "[nes]\nNES 1 = tv/nes-1.png 64 0 512 480\n", f);
+          "[nes]\nNES 1 = tv/nes-1.png 64 0 512 480\n[md]\nRot = @schwarz-rot\nKaputt = @gibtsnicht\n", f);
     fclose(f);
 
     CHECK_STR(gameopt_label(GO_SCALE), "Bild");
@@ -60,6 +60,19 @@ int main(void) {
         CHECK_INT(gameopt_get(user, "gb", GO_FRAME), 2);
         CHECK_INT(gameopt_set(user, "gb", GO_FRAME, 0), 0);
         load("gb", &d);
+        CHECK_INT(d.border, 0);
+    }
+    {   /* "@style" in frames.cfg: a drawn frame, the picture keeps its size */
+        SystemCfg d;
+        CHECK(gameopt_has_frame(sys, "md"));
+        CHECK_STR(gameopt_choice(GO_FRAME, 1), "Rot");
+        CHECK_INT(gameopt_set(user, "md", GO_FRAME, 1), 0);
+        load("md", &d);
+        CHECK(config_border(d.border) != NULL);
+        CHECK_STR(config_border(d.border)->name, "schwarz-rot");
+        CHECK_INT(d.scale, SCALE_INTEGER);
+        CHECK_INT(gameopt_set(user, "md", GO_FRAME, 2), 0);   /* unknown style: no frame */
+        load("md", &d);
         CHECK_INT(d.border, 0);
     }
 
