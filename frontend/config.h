@@ -10,6 +10,7 @@ typedef struct {
     int cx, cy, cw, ch;   /* SCALE_CUSTOM rectangle on the 640x480 screen */
     Filter filter;
     char overlay[256];    /* absolute PNG path, "" for none */
+    int border;           /* drawn frame around the picture: 0 none, 1 dark, 2 grey */
 } SystemCfg;
 
 #define CONFIG_FILE "/storage/.config/rgarch/systems.cfg"
@@ -36,4 +37,7 @@ int config_each(const char *file, const char *section, void (*fn)(void *, const 
 int config_frame_parse(const char *val, char *png, int n, int *x, int *y, int *w, int *h);
 /* applies user.cfg's "frame" for system: none = no frame; a label from frames_file = its
  * PNG and picture rectangle (SCALE_CUSTOM); absent = keep systems.cfg's */
+/* the drawn frames every system can use (after the PNG frames in the Rahmen list) */
+extern const char *const CONFIG_BORDERS[2];
+int config_border_style(const char *label);   /* 1/2 for CONFIG_BORDERS, else 0 */
 void config_frame(const char *frames_file, const char *user_file, const char *system, SystemCfg *c);

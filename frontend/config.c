@@ -114,6 +114,13 @@ int config_set(const char *file, const char *section, const char *key, const cha
     return rename(tmp, file);
 }
 
+const char *const CONFIG_BORDERS[2] = {"Schlicht schwarz", "Schlicht grau"};
+
+int config_border_style(const char *label) {
+    for (int i = 0; i < 2; i++) if (!strcmp(label, CONFIG_BORDERS[i])) return i + 1;
+    return 0;
+}
+
 int config_each(const char *file, const char *section, void (*fn)(void *, const char *, const char *), void *arg) {
     return each(file, section, fn, arg);
 }
@@ -129,6 +136,8 @@ void config_frame(const char *frames_file, const char *user_file, const char *sy
     char label[96], val[300], png[256];
     if (config_get(user_file, system, "frame", label, sizeof label)) return;
     if (!strcmp(label, "none")) { c->overlay[0] = 0; return; }
+    int b = config_border_style(label);
+    if (b) { c->overlay[0] = 0; c->border = b; return; }   /* drawn around any picture, keeps its size */
     int x, y, w, h;
     if (config_get(frames_file, system, label, val, sizeof val)
         || config_frame_parse(val, png, sizeof png, &x, &y, &w, &h)) return;   /* unknown: keep the default */

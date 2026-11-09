@@ -39,6 +39,7 @@ static void frames_for(const char *cfg, const char *system) {
     fr_n = 0;
     fr_default = !config_get(sys, system, "overlay", v, sizeof v) && *v && strcmp(v, "none");
     config_each(frames, system, add_label, NULL);
+    for (int i = 0; i < 2 && fr_n < MAXFRAMES; i++) snprintf(fr_label[fr_n++], sizeof fr_label[0], "%s", CONFIG_BORDERS[i]);
 }
 
 static int frame_count(void) { return fr_default + 1 + fr_n; }
@@ -54,7 +55,7 @@ const char *gameopt_choice(GameOpt o, int i) {
     return i >= 0 && i < fr_n ? fr_label[i] : "";
 }
 
-/* the Rahmen option is offered when there is something to choose */
+/* the Rahmen option: every system has at least the drawn frames */
 bool gameopt_has_frame(const char *syscfg, const char *system) {
     frames_for(syscfg, system);
     return fr_default || fr_n > 0;

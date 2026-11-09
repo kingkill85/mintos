@@ -7,7 +7,7 @@
 
 static SDL_Window *win;
 static SDL_Renderer *ren;
-static SDL_Texture *frame, *sharp, *overlay;
+static SDL_Texture *frame, *sharp, *overlay, *shade;   /* shade: drawn frame gradient */
 static int fw, fh, ffmt = -1, sharp_w, sharp_h, sw, sh;
 static char overlay_path[256];
 
@@ -29,7 +29,8 @@ void video_close(void) {
     if (frame) SDL_DestroyTexture(frame);
     if (sharp) SDL_DestroyTexture(sharp);
     if (overlay) SDL_DestroyTexture(overlay);
-    frame = sharp = overlay = NULL;
+    if (shade) SDL_DestroyTexture(shade);
+    frame = sharp = overlay = shade = NULL;
     if (ren) SDL_DestroyRenderer(ren);
     if (win) SDL_DestroyWindow(win);
     ren = NULL; win = NULL; ffmt = -1;
@@ -111,9 +112,49 @@ static void scanlines(const SDL_FRect *f) {
     }
 }
 
-static void draw_frame(const SystemCfg *s, float aspect, const SDL_Rect *dst) {
+/* the picture's rectangle as drawn (exact scale, scanlines' integer height) */
+static SDL_FRect picture_rect(const SystemCfg *s, const SDL_Rect *dst) {
     SDL_FRect f = video_exact_rect(dst, fw, fh);
     if (s->filter == FILTER_SCANLINES) f = scanline_rect(f);
+    return f;
+}
+
+/* drawn frame ("Schlicht schwarz/grau"): the border gets a colour with light from the top
+ * and an edge line around the picture, like os/frames/make-frames.sh */
+static void border_back(int style) {
+    static const SDL_Color base[2] = {{0x17, 0x17, 0x17, 255}, {0xc6, 0xc5, 0xcb, 255}};
+    SDL_Color b = base[style - 1];
+    SDL_SetRenderDrawColor(ren, b.r, b.g, b.b, 255);
+    SDL_RenderClear(ren);
+    if (!shade) {   /* 1x64 gradient: white 10 % at the top to black 18 % at the bottom */
+        shade = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, 1, 64);
+        if (!shade) return;
+        Uint32 px[64];
+        for (int i = 0; i < 64; i++) {
+            float t = i / 63.0f, a = t < 0.36f ? 0.10f * (1 - t / 0.36f) : 0.18f * (t - 0.36f) / 0.64f;
+            Uint32 rgb = t < 0.36f ? 0xffffff : 0;
+            px[i] = (Uint32)(a * 255) << 24 | rgb;
+        }
+        SDL_UpdateTexture(shade, NULL, px, sizeof px[0]);
+        SDL_SetTextureBlendMode(shade, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(shade, SDL_ScaleModeLinear);
+    }
+    SDL_RenderCopy(ren, shade, NULL, NULL);
+}
+
+static void border_edge(int style, const SDL_FRect *f) {
+    static const SDL_Color edge[2] = {{0x3c, 0x3c, 0x3c, 255}, {0x8f, 0x8d, 0x99, 255}};
+    SDL_Color e = edge[style - 1];
+    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(ren, e.r, e.g, e.b, 255);
+    for (int i = 1; i <= 3; i++) {
+        SDL_FRect r = {f->x - i, f->y - i, f->w + 2 * i, f->h + 2 * i};
+        SDL_RenderDrawRectF(ren, &r);
+    }
+}
+
+static void draw_frame(const SystemCfg *s, float aspect, const SDL_Rect *dst) {
+    SDL_FRect f = picture_rect(s, dst);
     if (s->filter == FILTER_SHARP || s->filter == FILTER_SCANLINES) {
         SDL_RenderCopyF(ren, sharpened(&(Rect){(int)f.x, (int)f.y, (int)f.w, (int)f.h}), NULL, &f);
         if (s->filter == FILTER_SCANLINES) scanlines(&f);
@@ -131,7 +172,12 @@ void video_draw(const SystemCfg *s, float aspect, bool dim) {
     if (frame) {
         Rect r = viewport(s, sw, sh, fw, fh, aspect);
         SDL_Rect dst = {r.x, r.y, r.w, r.h};
+        SDL_FRect f = picture_rect(s, &dst);
+        /* a drawn frame needs a border of at least 8 px somewhere */
+        int room = s->border >= 1 && s->border <= 2 && (f.x >= 8 || f.y >= 8);
+        if (room) border_back(s->border);
         draw_frame(s, aspect, &dst);
+        if (room) border_edge(s->border, &f);
     }
     if (strcmp(overlay_path, s->overlay)) {
         if (overlay) SDL_DestroyTexture(overlay);

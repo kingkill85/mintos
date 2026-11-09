@@ -37,15 +37,31 @@ int main(void) {
 
     /* Rahmen: offered when systems.cfg has a frame or frames.cfg lists some */
     CHECK(gameopt_has_frame(sys, "gbc"));
-    CHECK_INT(gameopt_count(GO_FRAME), 4);   /* Standard, Aus, Jeltron, GBC Raster */
+    CHECK_INT(gameopt_count(GO_FRAME), 6);   /* Standard, Aus, Jeltron, GBC Raster, 2 drawn */
     CHECK_STR(gameopt_choice(GO_FRAME, 0), "Standard");
     CHECK_STR(gameopt_choice(GO_FRAME, 1), "Aus");
     CHECK_STR(gameopt_choice(GO_FRAME, 3), "GBC Raster");
     CHECK(gameopt_has_frame(sys, "nes"));
-    CHECK_INT(gameopt_count(GO_FRAME), 2);   /* no default frame: Aus, NES 1 */
+    CHECK_INT(gameopt_count(GO_FRAME), 4);   /* no default frame: Aus, NES 1, 2 drawn */
+    CHECK_STR(gameopt_choice(GO_FRAME, 2), "Schlicht schwarz");
     CHECK_STR(gameopt_choice(GO_FRAME, 0), "Aus");
     CHECK_STR(gameopt_choice(GO_FRAME, 1), "NES 1");
-    CHECK(!gameopt_has_frame(sys, "gb"));
+    CHECK(gameopt_has_frame(sys, "gb"));   /* the drawn frames are there for every system */
+    CHECK_INT(gameopt_count(GO_FRAME), 3);
+
+    /* a drawn frame keeps the picture as it is and only sets the border style */
+    {
+        SystemCfg d;
+        CHECK_INT(gameopt_set(user, "gb", GO_FRAME, 2), 0);   /* Schlicht grau */
+        load("gb", &d);
+        CHECK_INT(d.border, 2);
+        CHECK_INT(d.scale, SCALE_INTEGER);
+        CHECK_STR(d.overlay, "");
+        CHECK_INT(gameopt_get(user, "gb", GO_FRAME), 2);
+        CHECK_INT(gameopt_set(user, "gb", GO_FRAME, 0), 0);
+        load("gb", &d);
+        CHECK_INT(d.border, 0);
+    }
 
     /* nothing set = Standard; set writes user.cfg, Standard removes the key again */
     SystemCfg c;
