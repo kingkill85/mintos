@@ -7,7 +7,8 @@
 #include <zlib.h>
 
 static void chunk(FILE *f, const char *type, const uint8_t *d, uint32_t n) {
-    uint32_t len = htonl(n), crc = crc32(crc32(0, (const Bytef *)type, 4), d, n);
+    uint32_t len = htonl(n), crc = crc32(0, (const Bytef *)type, 4);
+    if (n) crc = crc32(crc, d, n);   /* crc32(c, NULL, 0) would return the start value, not c */
     fwrite(&len, 4, 1, f);
     fwrite(type, 1, 4, f);
     if (n) fwrite(d, 1, n, f);

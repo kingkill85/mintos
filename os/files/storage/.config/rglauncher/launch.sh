@@ -14,8 +14,30 @@ if [ "$SYS" = scummvm ]; then
   DIR=${1#--path=}; ID=$2
   [ -f "$DIR/$ID.scummvm" ] || echo "$ID" > "$DIR/$ID.scummvm"
   ROM="$DIR/$ID.scummvm"
+  # Continue where the game was left: rgarch quicksaves into slot 10 on quit; save_slot in the
+  # game's section of scummvm.ini makes the engine load it at start (the core starts a target
+  # that has a section from there; gameid + path suffice, ScummVM adds the rest itself).
+  INI=/storage/roms/bios/scummvm.ini
+  SLOT=; [ -f "/storage/saves/scummvm/$ID.s10" ] && SLOT=10
+  case "$ID" in *:*) ;; *)
+    touch "$INI"
+    awk -v sec="[$ID]" -v gid="$ID" -v dir="$DIR" -v slot="$SLOT" '
+      function close_sec() { if (!hasg) print "gameid=" gid; if (!hasp) print "path=" dir
+                             if (slot != "") print "save_slot=" slot; in_sec = 0 }
+      /^\[/ { if (in_sec) close_sec(); for (; blank > 0; blank--) print ""
+              in_sec = ($0 == sec); if (in_sec) { found = 1; hasg = hasp = 0 }; print; next }
+      /^[ \t]*$/ { blank++; next }
+      { for (; blank > 0; blank--) print "" }
+      in_sec && /^save_slot=/ { next }
+      in_sec && /^gameid=/ { hasg = 1 }
+      in_sec && /^path=/ { hasp = 1 }
+      { print }
+      END { if (in_sec) close_sec(); for (; blank > 0; blank--) print ""
+            if (!found) { print ""; print sec; hasg = hasp = 0; close_sec() } }' "$INI" > "$INI.tmp" && mv "$INI.tmp" "$INI"
+  esac
   # Monkey Island 2: ScummVM accepts any answer to the code wheel; type one automatically
-  [ "$ID" = monkey2 ] && /usr/local/sbin/mi2-copyprotect >/dev/null 2>&1 &
+  # (only on a fresh start: loading the resume slot skips the protection)
+  [ "$ID" = monkey2 ] && [ -z "$SLOT" ] && /usr/local/sbin/mi2-copyprotect >/dev/null 2>&1 &
 fi
 
 if grep -q "^\[$SYS\]" /storage/.config/rgarch/systems.cfg 2>/dev/null; then

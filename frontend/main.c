@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <SDL.h>
 #include <SDL_image.h>
 #include "audio.h"
@@ -40,11 +41,49 @@ static struct { unsigned code; uint16_t mod; int step; } pending;
 /* ScummVM (SCUMM engine): no savestates, but quicksave slots Alt+1..9 / load Ctrl+1..9;
  * menu slots 0..8 map to ScummVM slots 1..9, slot 0 stays ScummVM's own autosave */
 static bool kstates;
+/* ScummVM keeps playing where it was left: on quit rgarch quicksaves with Alt+0 (SCUMM puts
+ * it in slot 10, slot 0 is its autosave); launch.sh sets save_slot=10 for the next start in
+ * scummvm.ini, so the engine loads it right away (keys are ignored in intros and the copy
+ * protection). This also makes the power-key resume work, which needs savestates otherwise. */
+static char scumm_resume[1024];
+#define SCUMM_SAVE_MS 3000
+
+static void send_key(unsigned code, uint16_t mod);
 
 static void send_key(unsigned code, uint16_t mod) { pending.code = code; pending.mod = mod; pending.step = 0; }
 
 static void on_video(const void *d, unsigned w, unsigned h, size_t pitch) { video_frame(d, w, h, pitch, core.fmt); }
 static float aspect(void) { return core.av.geometry.aspect_ratio; }
+
+/* one frame of the game: pending key, core, picture, audio pacing */
+static void run_frame(void) {
+    if (pending.code && core.keyboard) {
+        core.keyboard(pending.step == 0, pending.code, 0, pending.mod);
+        if (++pending.step == 2) pending.code = 0;
+    }
+    core_run(&core);
+    video_draw(&cfg, aspect(), false);
+    video_flip();
+    audio_wait();
+}
+
+static struct timespec mtime_of(const char *p) {
+    struct stat st;
+    return stat(p, &st) ? (struct timespec){0} : st.st_mtim;
+}
+
+/* the quicksave for the next start; runs the game until ScummVM wrote it (or gives up) */
+static void scumm_save_resume(void) {
+    struct timespec before = mtime_of(scumm_resume), now;
+    send_key(RETROK_0, RETROKMOD_ALT);
+    Uint32 t0 = SDL_GetTicks();
+    do {
+        run_frame();
+        now = mtime_of(scumm_resume);
+    } while ((now.tv_sec == before.tv_sec && now.tv_nsec == before.tv_nsec) && SDL_GetTicks() - t0 < SCUMM_SAVE_MS);
+    bool ok = now.tv_sec != before.tv_sec || now.tv_nsec != before.tv_nsec;
+    rg_log("scummvm resume save %s: %s\n", scumm_resume, ok ? "ok" : "not written");
+}
 
 static const char *root(void) { const char *r = getenv("RGARCH_ROOT"); return r ? r : ""; }
 
@@ -222,6 +261,12 @@ int main(int argc, char **argv) {
     }
     input_set_keyboard(core.keyboard);
     kstates = !core.can_state && core.keyboard && !strcmp(system, "scummvm");
+    /* <saves>/scummvm/<target>.s10 (the .scummvm file is named after the target) */
+    int frame = 0;
+    if (kstates && !path_for(P_SRAM, rom, 0, scumm_resume, sizeof scumm_resume)) {
+        char *dot = strrchr(scumm_resume, '.');
+        if (dot) strcpy(dot, ".s10");
+    } else scumm_resume[0] = 0;
     audio_open(core.av.timing.sample_rate);
     state_sram_load(&core, rom);
 
@@ -232,6 +277,7 @@ int main(int argc, char **argv) {
     while (!quit_signal) {
         if (input_poll() && !run_menu(&slot)) break;
         Uint32 t_a = SDL_GetTicks();
+        frame++;
         if (pending.code && core.keyboard) {
             core.keyboard(pending.step == 0, pending.code, 0, pending.mod);
             if (++pending.step == 2) pending.code = 0;
@@ -244,7 +290,7 @@ int main(int argc, char **argv) {
         }
         /* a resume that fails to load must not be replaced by this fresh start on exit */
         if (first) {
-            if (resume && !state_load(&core, rom, -1)) {
+            if (resume && core.can_state && !state_load(&core, rom, -1)) {
                 /* keep an unloadable resume point aside instead of losing it on the next power-off */
                 char a[1024], b[1100];
                 if (!path_for(P_AUTO, rom, 0, a, sizeof a)) {
@@ -273,6 +319,8 @@ int main(int argc, char **argv) {
     }
     /* not before the first frame: that would replace a good resume point with a fresh boot */
     if (quit_signal && core.can_state && ran) state_save(&core, rom, -1, NULL);
+    /* ScummVM: on every quit (menu or power key), once the game is up */
+    if (scumm_resume[0] && ran && frame > 60) scumm_save_resume();
     state_sram_wait();
     state_sram_save(&core, rom);
     audio_close();
