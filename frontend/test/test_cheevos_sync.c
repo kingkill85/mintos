@@ -16,6 +16,8 @@
 #define HASH "0829f71740aab1ab98b33eae21dee122"
 
 static int offline;            /* the whole network is down */
+static int hl_mode;            /* hashlibrary: 0 normal, 1 Success:false, 2 garbage */
+static int unlocks_bad;        /* unlocks answer 200 with an expired_token Code */
 static const char *award_mode; /* ok | already | badtoken | rejected */
 static char calls[64][24];     /* r= values seen, in order */
 static int ncalls;
@@ -46,15 +48,23 @@ static int fake(const char *url, const char *post, char **body, int *status) {
         if (strstr(post, "&p=") && !strstr(post, "&p=secret")) {
             *body = strdup("{\"Success\":false,\"Error\":\"Invalid User/Password combination. Please try again\",\"Code\":\"invalid_credentials\",\"Status\":401}");
             *status = 401;
-        } else *body = load("login2.json");
-    } else if (!strcmp(name, "hashlibrary")) *body = strstr(post, "c=7") ? load("hashlibrary-7.json") : strdup("{\"Success\":true,\"MD5List\":[]}");
+        } else if (strstr(post, "u=Other")) *body = strdup("{\"Success\":true,\"User\":\"Other\",\"Token\":\"TOK999\",\"Score\":1,\"SoftcoreScore\":1,\"Messages\":0}");
+        else *body = load("login2.json");
+    } else if (!strcmp(name, "hashlibrary")) {
+        if (hl_mode == 1) *body = strdup("{\"Success\":false,\"Error\":\"nope\"}");
+        else if (hl_mode == 2) *body = strdup("<html>captive portal</html>");
+        else *body = strstr(post, "c=7") ? load("hashlibrary-7.json") : strdup("{\"Success\":true,\"MD5List\":[]}");
+    }
     else if (!strcmp(name, "achievementsets")) *body = load("achievementsets.json");
-    else if (!strcmp(name, "startsession")) *body = load("startsession.json");
+    else if (!strcmp(name, "unlocks")) *body = load(unlocks_bad ? "unlocks-badtoken.json" : "unlocks.json");
+    else if (!strcmp(name, "startsession")) *body = strdup("{\"Success\":true}");
     else if (!strcmp(name, "awardachievement")) {
         snprintf(last_award, sizeof last_award, "%s", post);
         if (!strcmp(award_mode, "ok")) *body = load("award-ok.json");
         else if (!strcmp(award_mode, "already")) *body = load("award-already.json");
         else if (!strcmp(award_mode, "badtoken")) { *body = load("award-badtoken.json"); *status = 401; }
+        else if (!strcmp(award_mode, "badtoken200")) *body = load("award-badtoken.json");   /* no HTTP 401: only the Code says so */
+        else if (!strcmp(award_mode, "429")) { *body = strdup("{\"Error\":\"Too Many Requests\"}"); *status = 429; }
         else *body = strdup("{\"Success\":false,\"Error\":\"Unknown achievement.\"}");
     } else *body = strdup("{\"Success\":true}");
     return 0;
@@ -133,7 +143,8 @@ int main(void) {
     CHECK_STR(h, HASH); CHECK_INT(gid, 1234);
     CHECK_INT(called("hashlibrary"), 1);
     CHECK_INT(called("achievementsets"), 1);
-    CHECK_INT(called("startsession"), 1);
+    CHECK_INT(called("unlocks"), 1);
+    CHECK_INT(called("startsession"), 0);   /* never: it would mark the library as played */
 
     /* second sync: nothing to hash, no new hashlibrary, game data still fresh */
     ncalls = 0;
@@ -213,6 +224,68 @@ int main(void) {
     CHECK_INT(r.uploaded, 1);
     CHECK(!exists("queue/%ld-101.json", now - 10));
 
+    /* HTTP 429 is "try later", never "uploaded": file kept even though the body has no Success */
+    award_mode = "429";
+    cs_queue_add(1234, 101, HASH, now - 9);
+    CHECK_INT(cs_sync(fake, roms, &r), -1);
+    CHECK(exists("queue/%ld-101.json", now - 9));
+    CHECK_INT(r.uploaded, 0); CHECK_INT(r.failed, 0);
+
+    /* expired token announced only by the body's Code (HTTP 200) is still RF3 */
+    award_mode = "badtoken200";
+    ncalls = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), 1);
+    CHECK(exists("queue/%ld-101.json", now - 9));
+    CHECK(exists("token.invalid"));
+    CHECK_INT(called("hashlibrary"), 0);
+    award_mode = "ok";
+    CHECK_INT(cs_login(fake, "Tester", "secret"), 0);
+    CHECK_INT(cs_sync(fake, roms, &r), 0);
+    CHECK(!exists("queue/%ld-101.json", now - 9));
+    /* same for the unlocks request */
+    unlocks_bad = 1;
+    CHECK_INT(cs_sync(fake, roms, &r), 1);
+    CHECK(exists("token.invalid"));
+    unlocks_bad = 0;
+    CHECK_INT(cs_login(fake, "Tester", "secret"), 0);
+
+    /* a new ROM in a subfolder is found, a stray .txt is not hashed; an unreachable server means no hashing at all */
+    snprintf(p, sizeof p, "%s/roms/nes/sub", root); sh("mkdir -p '%s'", p);
+    nes[200] = 7;
+    snprintf(rom, sizeof rom, "%s/b.nes", p);
+    put(rom, nes, sizeof nes);
+    nes[200] = 0;
+    snprintf(p, sizeof p, "%s/roms/nes/readme.txt", root);
+    put(p, "hello", 5);
+    offline = 1;
+    CHECK_INT(cs_sync(fake, roms, &r), -1);
+    CHECK_INT(r.hashed, 0);
+    offline = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), 0);
+    CHECK_INT(r.hashed, 1);
+    CHECK(cs_hash_lookup(rom, h, &gid) == 0);
+    {
+        char *tsv = cs_read("hashes.tsv", NULL);
+        CHECK(tsv && !strstr(tsv, "readme.txt") && strstr(tsv, "sub/b.nes"));
+        free(tsv);
+    }
+
+    /* one hashlibrary request per console and sync, even when it fails; garbage = no network */
+    for (int i = 1; i <= 2; i++) {
+        char nm[1100]; nes[300] = i;
+        snprintf(nm, sizeof nm, "%s/roms/nes/c%d.nes", root, i);
+        put(nm, nes, sizeof nes);
+    }
+    nes[300] = 0;
+    hl_mode = 1; ncalls = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), 0);
+    CHECK_INT(called("hashlibrary"), 1);
+    hl_mode = 2; ncalls = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), -1);
+    CHECK_INT(called("hashlibrary"), 1);
+    hl_mode = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), 0);
+
     /* ROM changed -> hashed again */
     nes[100] = 1;
     put(rom, nes, sizeof nes);
@@ -237,12 +310,24 @@ int main(void) {
     CHECK(cs_hash_lookup(p, h, &gid) == 0 && !strcmp(h, HASH) && gid == 1234);
     CHECK(cs_hash_lookup(rom, h, &gid) == 0 && strlen(h) == 32 && gid == 0);
     CHECK_INT(called("hashlibrary"), 2);   /* NES (7) and ARCADE (27) */
-    snprintf(p, sizeof p, "%s/tmp/rgarch-rom/a.nes", root);
-    CHECK(access(p, F_OK) != 0);   /* extraction cleaned up */
+    snprintf(p, sizeof p, "%s/tmp/rgarch-rom", root);
+    CHECK(access(p, F_OK) != 0);   /* whole extraction dir gone */
 
     /* logout */
+    /* logout keeps queue/ and local/, drops user/; the same account's login keeps them, another account's drops them */
+    cs_queue_add(1234, 101, HASH, now - 5);
+    CHECK(exists("user/1234.json") && exists("local/1234.txt"));
     CHECK_INT(cs_logout(), 0);
-    CHECK(!exists("token") && !exists("login.json"));
+    CHECK(!exists("token") && !exists("login.json") && !exists("user"));
+    CHECK(exists("queue/%ld-101.json", now - 5) && exists("local/1234.txt"));
+    CHECK_INT(cs_login(fake, "tester", "secret"), 0);   /* case-insensitive same user */
+    CHECK(exists("queue/%ld-101.json", now - 5) && exists("local/1234.txt"));
+    CHECK_INT(cs_logout(), 0);
+    CHECK_INT(cs_login(fake, "Other", "secret"), 0);
+    CHECK(!exists("queue/%ld-101.json", now - 5) && exists("queue/failed/%ld-101.json", now - 5));
+    CHECK(!exists("local") && !exists("user"));
+    { char *lu = cs_read("last_user", NULL); CHECK(lu && !strncmp(lu, "Other", 5)); free(lu); }
+    CHECK_INT(cs_logout(), 0);
 
     sh("rm -rf '%s'", root);
     TEST_END();

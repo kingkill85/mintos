@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE 700   /* nftw */
+#define _DEFAULT_SOURCE     /* strcasestr, d_name etc. */
 #include "cheevos_sync.h"
 #include "cheevos_store.h"
 #include "archive.h"
@@ -6,6 +8,7 @@
 #include "rc_api_user.h"
 #include "rc_hash.h"
 #include <dirent.h>
+#include <ftw.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,11 +27,23 @@
 static int call(cs_http_fn http, const rc_api_request_t *rq, char **body, int *status) {
     *body = NULL; *status = 0;
     if (http(rq->url, rq->post_data, body, status)) { free(*body); *body = NULL; return -1; }
-    if (*status >= 500 || !*body) { free(*body); *body = NULL; return -1; }
+    if (*status >= 500 || *status == 429 || !*body) { free(*body); *body = NULL; return -1; }
     return 0;
 }
 
-static int invalid_token(const rc_api_response_t *r, int status) {
+/* the awardachievement/unlocks parsers do not read "Code", so look in the raw body too */
+static int body_has_bad_code(const char *body) {
+    const char *c = body;
+    while ((c = strstr(c, "\"Code\""))) {
+        c += 6;
+        while (*c == ' ' || *c == ':') c++;
+        if (!strncmp(c, "\"invalid_credentials\"", 21) || !strncmp(c, "\"expired_token\"", 15)) return 1;
+    }
+    return 0;
+}
+
+static int invalid_token(const rc_api_response_t *r, int status, const char *body) {
+    if (body_has_bad_code(body)) return 1;
     if (r->succeeded) return 0;
     if (r->error_code && (!strcmp(r->error_code, "invalid_credentials") || !strcmp(r->error_code, "expired_token"))) return 1;
     return status == 401;
@@ -50,6 +65,36 @@ static rc_api_server_response_t srv(const char *body, int status) {
     return s;
 }
 
+/* ---- helpers for files ---- */
+
+static int rm_cb(const char *p, const struct stat *st, int flag, struct FTW *f) { (void)st; (void)flag; (void)f; return remove(p); }
+static void rm_rf(const char *path) { nftw(path, rm_cb, 16, FTW_DEPTH | FTW_PHYS); }
+static void rm_rf_rel(const char *rel) { char p[1024]; if (!cs_path(p, sizeof p, "%s", rel)) rm_rf(p); }
+
+static void to_failed(const char *name) {
+    char from[1024], dir[1024], to[1100];
+    if (cs_path(from, sizeof from, "queue/%s", name) || cs_path(dir, sizeof dir, "queue/failed")) return;
+    mkdir(dir, 0755);
+    snprintf(to, sizeof to, "%s/%s", dir, name);
+    rename(from, to);
+}
+
+/* another account: its unlocks must not go to the new one, and its caches are wrong */
+static void drop_account_data(void) {
+    char dirp[1024];
+    if (!cs_path(dirp, sizeof dirp, "queue")) {
+        DIR *d = opendir(dirp);
+        struct dirent *de;
+        while (d && (de = readdir(d))) {
+            size_t l = strlen(de->d_name);
+            if (de->d_name[0] != '.' && l > 5 && !strcmp(de->d_name + l - 5, ".json")) to_failed(de->d_name);
+        }
+        if (d) closedir(d);
+    }
+    rm_rf_rel("local");
+    rm_rf_rel("user");
+}
+
 /* ---- login ---- */
 
 int cs_login(cs_http_fn http, const char *user, const char *password) {
@@ -66,9 +111,13 @@ int cs_login(cs_http_fn http, const char *user, const char *password) {
     if (bad_answer(rc)) ret = -1;
     else if (!resp.response.succeeded) ret = 1;
     else {
-        char tok[512];
-        int n = snprintf(tok, sizeof tok, "%s\n%s\n", resp.username && *resp.username ? resp.username : user, resp.api_token);
-        if (n <= 0 || n >= (int)sizeof tok || cs_write("login.json", body, strlen(body)) || cs_write("token", tok, n)) ret = -1;
+        const char *name = resp.username && *resp.username ? resp.username : user;
+        char tok[512], last[128];
+        int n = snprintf(tok, sizeof tok, "%s\n%s\n", name, resp.api_token);
+        char *lu = cs_read("last_user", NULL);
+        if (lu) { snprintf(last, sizeof last, "%s", lu); last[strcspn(last, "\n")] = 0; free(lu); if (strcasecmp(last, name)) drop_account_data(); }
+        if (n <= 0 || n >= (int)sizeof tok || cs_write("login.json", body, strlen(body)) || cs_write("token", tok, n)
+            || cs_write("last_user", tok, strchr(tok, '\n') - tok)) ret = -1;
         else {
             char p[1024];
             if (!cs_path(p, sizeof p, "token.invalid")) unlink(p);
@@ -81,26 +130,20 @@ int cs_login(cs_http_fn http, const char *user, const char *password) {
     return ret;
 }
 
+/* keeps queue/ and local/ (a later login of the same account uploads them) and last_user (a different account then drops them) */
 int cs_logout(void) {
     const char *f[] = { "token", "token.invalid", "login.json" };
     for (int i = 0; i < 3; i++) {
         char p[1024];
         if (!cs_path(p, sizeof p, "%s", f[i])) unlink(p);
     }
+    rm_rf_rel("user");
     return 0;
 }
 
 /* ---- queue ---- */
 
 static int by_name(const void *a, const void *b) { return strcmp(*(char *const *)a, *(char *const *)b); }
-
-static void to_failed(const char *name) {
-    char from[1024], dir[1024], to[1100];
-    if (cs_path(from, sizeof from, "queue/%s", name) || cs_path(dir, sizeof dir, "queue/failed")) return;
-    mkdir(dir, 0755);
-    snprintf(to, sizeof to, "%s/%s", dir, name);
-    rename(from, to);
-}
 
 /* 0 done, 1 token invalid, -1 no network */
 static int upload_queue(cs_http_fn http, const char *user, const char *token, CsReport *r) {
@@ -145,7 +188,7 @@ static int upload_queue(cs_http_fn http, const char *user, const char *token, Cs
         int rc = rc_api_process_award_achievement_server_response(&resp, &s);
         char p[1024];
         if (bad_answer(rc)) ret = -1;                 /* not an RA answer (captive portal...): keep, retry later */
-        else if (invalid_token(&resp.response, status)) ret = mark_invalid(r);
+        else if (invalid_token(&resp.response, status, body)) ret = mark_invalid(r);
         else if (resp.response.succeeded) {
             if (!cs_path(p, sizeof p, "%s", rel)) unlink(p);
             if (!resp.response.error_message) r->uploaded++;   /* RF4: rcheevos turns "User already has ..." into success, with the message kept: done, not uploaded */
@@ -176,9 +219,8 @@ static int hash_rom(const CsSystem *sys, const char *rom, char hash[33]) {
     if (archive_prepare(rom, sys->exts, out, sizeof out)) return -1;
     int ok = rc_hash_generate_from_file(hash, sys->console, out);
     if (strcmp(out, rom)) {   /* extracted into $TMPDIR/rgarch-rom: remove again */
-        unlink(out);
         char *s = strrchr(out, '/');
-        if (s) { *s = 0; rmdir(out); }
+        if (s) { *s = 0; rm_rf(out); }   /* the whole extraction dir (cue+bins), as archive_prepare clears it */
     }
     return ok ? 0 : -1;
 }
@@ -231,7 +273,8 @@ static int lookup_console(cs_http_fn http, Row *rows, int n, unsigned console) {
     if (net) return -1;
     rc_api_fetch_hash_library_response_t resp;
     rc_api_server_response_t s = srv(body, status);
-    if (!bad_answer(rc_api_process_fetch_hash_library_server_response(&resp, &s)) && resp.response.succeeded) {
+    int garbage = bad_answer(rc_api_process_fetch_hash_library_server_response(&resp, &s));
+    if (!garbage && resp.response.succeeded) {
         const rc_api_hash_library_entry_t **ix = malloc((resp.num_entries + 1) * sizeof *ix);
         for (uint32_t i = 0; ix && i < resp.num_entries; i++) ix[i] = &resp.entries[i];
         if (ix) qsort(ix, resp.num_entries, sizeof *ix, by_hash);
@@ -248,7 +291,69 @@ static int lookup_console(cs_http_fn http, Row *rows, int n, unsigned console) {
     }
     rc_api_destroy_fetch_hash_library_response(&resp);
     free(body);
+    return garbage ? -1 : 0;
+}
+
+typedef struct { Row *rows; int n, cap; long now; CsReport *rep; } Scan;
+
+static int ext_in(const char *list, const char *ext) {
+    size_t n = strlen(ext);
+    for (const char *p = list; p && *p;) {
+        const char *bar = strchr(p, '|');
+        size_t len = bar ? (size_t)(bar - p) : strlen(p);
+        if (len == n && !strncasecmp(p, ext, n)) return 1;
+        p = bar ? bar + 1 : NULL;
+    }
     return 0;
+}
+
+static void scan_file(Scan *c, const CsSystem *sys, const char *path, const struct stat *st) {
+    Row *r = NULL;
+    for (int i = 0; i < c->n && !r; i++) if (!strcmp(c->rows[i].path, path)) r = &c->rows[i];
+    if (!r) {
+        if (c->n == c->cap) {
+            Row *nr = realloc(c->rows, (c->cap ? c->cap * 2 : 256) * sizeof *nr);
+            if (!nr) return;
+            c->rows = nr; c->cap = c->cap ? c->cap * 2 : 256;
+        }
+        r = &c->rows[c->n++];
+        memset(r, 0, sizeof *r);
+        snprintf(r->path, sizeof r->path, "%s", path);
+        r->size = -1;
+    }
+    r->seen = 1; r->console = sys->console;
+    if (r->size != st->st_size || r->mtime != st->st_mtime) r->need_hash = 1;                  /* new or changed */
+    else if (!r->gid && (!r->checked || c->now - r->checked > RETRY_AGE)) {                      /* unknown game: retry monthly */
+        if (strlen(r->hash) == 32) r->need_lookup = 1; else r->need_hash = 1;
+    }
+    if (r->need_hash) {
+        r->size = st->st_size; r->mtime = st->st_mtime; r->gid = 0; r->checked = 0;
+        if (hash_rom(sys, path, r->hash)) snprintf(r->hash, sizeof r->hash, "-");
+        else c->rep->hashed++;
+        r->need_hash = 0;
+        r->need_lookup = strlen(r->hash) == 32;
+        if (!r->need_lookup) r->checked = c->now;   /* not a ROM: no server question */
+    }
+}
+
+/* same rules as the launcher's scan_dir: depth 2, no dotfiles, no images/videos/manuals; only the system's extensions (+ archives) */
+static void scan_dir(Scan *c, const CsSystem *sys, const char *dir, int depth) {
+    DIR *d = opendir(dir);
+    if (!d) return;
+    struct dirent *de;
+    while ((de = readdir(d))) {
+        char path[1024]; struct stat st;
+        if (de->d_name[0] == '.' || snprintf(path, sizeof path, "%s/%s", dir, de->d_name) >= (int)sizeof path) continue;
+        if (stat(path, &st)) continue;
+        if (S_ISDIR(st.st_mode)) {
+            if (depth < 2 && strcasecmp(de->d_name, "images") && strcasecmp(de->d_name, "videos") && strcasecmp(de->d_name, "manuals"))
+                scan_dir(c, sys, path, depth + 1);
+        } else if (S_ISREG(st.st_mode)) {
+            const char *dot = strrchr(de->d_name, '.');
+            if (dot && dot != de->d_name && (ext_in(sys->exts, dot + 1) || ext_in("zip|7z", dot + 1))) scan_file(c, sys, path, &st);
+        }
+    }
+    closedir(d);
 }
 
 /* scan roms_dir, update rows (hash what changed), ask the server about unknown hashes. 0 ok, -1 no network */
@@ -260,46 +365,21 @@ static int hash_step(cs_http_fn http, const char *roms_dir, Row **rowsp, int *np
     long now = (long)time(NULL);
     rc_hash_init_default_cdreader();
 
+    Scan sc = { rows, n, cap, now, rep };
     DIR *rd = opendir(roms_dir);
     struct dirent *sd;
     while (rd && (sd = readdir(rd))) {
         const CsSystem *sys = cs_system(sd->d_name);
         char sdir[1024];
         if (!sys || snprintf(sdir, sizeof sdir, "%s/%s", roms_dir, sd->d_name) >= (int)sizeof sdir) continue;
-        DIR *d = opendir(sdir);
-        if (!d) continue;
+        DIR *t = opendir(sdir);
+        if (!t) continue;
+        closedir(t);
         if (nscanned < 64) snprintf(scanned[nscanned++], 64, "%.63s", sd->d_name);
-        struct dirent *de;
-        while ((de = readdir(d))) {
-            char path[1024]; struct stat st;
-            if (de->d_name[0] == '.' || snprintf(path, sizeof path, "%s/%s", sdir, de->d_name) >= (int)sizeof path) continue;
-            if (stat(path, &st) || !S_ISREG(st.st_mode)) continue;
-            Row *r = NULL;
-            for (int i = 0; i < n && !r; i++) if (!strcmp(rows[i].path, path)) r = &rows[i];
-            if (!r) {
-                if (n == cap && !(rows = realloc(rows, (cap = cap ? cap * 2 : 256) * sizeof *rows))) { closedir(d); closedir(rd); *np = 0; *rowsp = NULL; return 0; }
-                r = &rows[n++];
-                memset(r, 0, sizeof *r);
-                snprintf(r->path, sizeof r->path, "%s", path);
-                r->size = -1;
-            }
-            r->seen = 1; r->console = sys->console;
-            if (r->size != st.st_size || r->mtime != st.st_mtime) r->need_hash = 1;                /* new or changed */
-            else if (!r->gid && (!r->checked || now - r->checked > RETRY_AGE)) {                    /* unknown game: retry monthly */
-                if (strlen(r->hash) == 32) r->need_lookup = 1; else r->need_hash = 1;
-            }
-            if (r->need_hash) {
-                r->size = st.st_size; r->mtime = st.st_mtime; r->gid = 0; r->checked = 0;
-                if (hash_rom(sys, path, r->hash)) snprintf(r->hash, sizeof r->hash, "-");
-                else { rep->hashed++; }
-                r->need_hash = 0;
-                r->need_lookup = strlen(r->hash) == 32;
-                if (!r->need_lookup) r->checked = now;   /* not a ROM: no server question */
-            }
-        }
-        closedir(d);
+        scan_dir(&sc, sys, sdir, 0);
     }
     if (rd) closedir(rd);
+    rows = sc.rows; n = sc.n;
 
     /* drop rows of ROMs that are gone (only in system dirs we could read) */
     size_t rl = strlen(roms_dir);
@@ -320,10 +400,14 @@ static int hash_step(cs_http_fn http, const char *roms_dir, Row **rowsp, int *np
     n = m;
 
     int net = 0;
+    unsigned asked[64]; int nasked = 0;   /* one hashlibrary request per console and sync, whatever the answer */
     for (int i = 0; i < n && !net; i++) {
         if (!rows[i].need_lookup) continue;
+        int done = 0;
+        for (int k = 0; k < nasked; k++) done |= asked[k] == rows[i].console;
+        if (done || nasked == 64) continue;
+        asked[nasked++] = rows[i].console;
         net = lookup_console(http, rows, n, rows[i].console);
-        if (net) break;
     }
     if (!net || n) save_rows(rows, n);
     *rowsp = rows; *np = n;
@@ -332,18 +416,18 @@ static int hash_step(cs_http_fn http, const char *roms_dir, Row **rowsp, int *np
 
 /* ---- game data and sessions ---- */
 
-static int has_unlock(const rc_api_unlock_entry_t *u, uint32_t n, unsigned id) {
-    for (uint32_t i = 0; i < n; i++) if (u[i].achievement_id == id) return 1;
+static int has_unlock(const uint32_t *u, uint32_t n, unsigned id) {
+    for (uint32_t i = 0; i < n; i++) if (u[i] == id) return 1;
     return 0;
 }
 
 /* drop local/<gid>.txt entries the server's list already has */
-static void clean_local(unsigned gid, const rc_api_start_session_response_t *s) {
+static void clean_local(unsigned gid, const rc_api_fetch_user_unlocks_response_t *s) {
     unsigned ids[1024]; long when[1024];
     int n = cs_local_unlocks(gid, ids, when, 1024), kept = 0;
     char buf[1024 * 32], *w = buf;
     for (int i = 0; i < n; i++) {
-        if (has_unlock(s->unlocks, s->num_unlocks, ids[i]) || has_unlock(s->hardcore_unlocks, s->num_hardcore_unlocks, ids[i])) continue;
+        if (has_unlock(s->achievement_ids, s->num_achievement_ids, ids[i])) continue;
         w += snprintf(w, buf + sizeof buf - w, "%u %ld\n", ids[i], when[i]);
         kept++;
     }
@@ -370,7 +454,7 @@ static int fetch_game(cs_http_fn http, const char *user, const char *token, cons
     rc_api_server_response_t s = srv(body, status);
     int ret = 0;
     if (!bad_answer(rc_api_process_fetch_game_sets_server_response(&resp, &s))) {
-        if (invalid_token(&resp.response, status)) ret = mark_invalid(rep);
+        if (invalid_token(&resp.response, status, body)) ret = mark_invalid(rep);
         else if (resp.response.succeeded) cs_write(rel, body, strlen(body));
     }
     rc_api_destroy_fetch_game_sets_response(&resp);
@@ -378,26 +462,26 @@ static int fetch_game(cs_http_fn http, const char *user, const char *token, cons
     return ret;
 }
 
-static int fetch_session(cs_http_fn http, const char *user, const char *token, unsigned gid, const char *hash, CsReport *rep) {
-    rc_api_start_session_request_t sp = { user, token, gid, hash, 0 };
+/* user/<gid>.json = the raw r=unlocks answer ("UserUnlocks":[ids], softcore). Not startsession: that would mark the game as played on the profile. */
+static int fetch_unlocks(cs_http_fn http, const char *user, const char *token, unsigned gid, CsReport *rep) {
+    rc_api_fetch_user_unlocks_request_t up = { user, token, gid, 0 };
     rc_api_request_t rq;
-    if (rc_api_init_start_session_request(&rq, &sp) != RC_OK) return 0;
+    if (rc_api_init_fetch_user_unlocks_request(&rq, &up) != RC_OK) return 0;
     char *body; int status;
     int net = call(http, &rq, &body, &status);
     rc_api_destroy_request(&rq);
     if (net) return -1;
-    rc_api_start_session_response_t resp;
+    rc_api_fetch_user_unlocks_response_t resp;
     rc_api_server_response_t s = srv(body, status);
-    int ret = 0;
-    if (!bad_answer(rc_api_process_start_session_server_response(&resp, &s))) {
-        if (invalid_token(&resp.response, status)) ret = mark_invalid(rep);
-        else if (resp.response.succeeded) {
-            char rel[64];
-            snprintf(rel, sizeof rel, "user/%u.json", gid);
-            if (!cs_write(rel, body, strlen(body))) clean_local(gid, &resp);
-        }
+    int rc = rc_api_process_fetch_user_unlocks_server_response(&resp, &s), ret = 0;
+    if (bad_answer(rc)) ret = -1;
+    else if (invalid_token(&resp.response, status, body)) ret = mark_invalid(rep);
+    else if (resp.response.succeeded) {
+        char rel[64];
+        snprintf(rel, sizeof rel, "user/%u.json", gid);
+        if (!cs_write(rel, body, strlen(body))) clean_local(gid, &resp);
     }
-    rc_api_destroy_start_session_response(&resp);
+    rc_api_destroy_fetch_user_unlocks_response(&resp);
     free(body);
     return ret;
 }
@@ -413,8 +497,9 @@ static int refresh_login(cs_http_fn http, const char *user, const char *token, C
     rc_api_login_response_t resp;
     rc_api_server_response_t s = srv(body, status);
     int ret = 0;
-    if (!bad_answer(rc_api_process_login_server_response(&resp, &s))) {
-        if (invalid_token(&resp.response, status)) ret = mark_invalid(rep);
+    if (bad_answer(rc_api_process_login_server_response(&resp, &s))) ret = -1;
+    else {
+        if (invalid_token(&resp.response, status, body)) ret = mark_invalid(rep);
         else if (resp.response.succeeded) cs_write("login.json", body, strlen(body));
     }
     rc_api_destroy_login_response(&resp);
@@ -436,12 +521,13 @@ int cs_sync(cs_http_fn http, const char *roms_dir, CsReport *rep) {
 
     int rc = upload_queue(http, user, token, rep);
     if (rc) return rc;
+    /* the server must answer before any local work (hashing): with an empty queue this is the first call */
+    if ((rc = refresh_login(http, user, token, rep))) return rc;
 
     Row *rows; int n;
     rc = hash_step(http, roms_dir, &rows, &n, rep);
     if (rc) { free(rows); return rc; }
 
-    if ((rc = refresh_login(http, user, token, rep))) { free(rows); return rc; }
 
     /* distinct hashes with a known game */
     for (int i = 0; i < n && !rc; i++) {
@@ -456,7 +542,7 @@ int cs_sync(cs_http_fn http, const char *roms_dir, CsReport *rep) {
         for (int j = 0; j < i && !dup; j++) dup = rows[j].gid == rows[i].gid && has_game(&rows[j]);
         if (dup) continue;
         rep->games++;
-        rc = fetch_session(http, user, token, rows[i].gid, rows[i].hash, rep);
+        rc = fetch_unlocks(http, user, token, rows[i].gid, rep);
     }
     free(rows);
     return rc;

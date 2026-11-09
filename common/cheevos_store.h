@@ -12,6 +12,6 @@ int cs_hash_lookup(const char *rom, char hash[33], unsigned *game_id);
 int cs_queue_add(unsigned game_id, unsigned ach_id, const char *hash, long when);
 int cs_local_unlocks(unsigned game_id, unsigned *ids, long *when, int max);  /* returns count */
 
-/* rgarch system (a [section] of systems.cfg) -> RetroAchievements console; exts: the ROM extensions it uses, '|'-separated */
+/* rgarch system (a [section] of systems.cfg) -> RetroAchievements console; exts: the extensions the core/launcher accept (as launcher SYSTEMS[].exts, without zip/7z, which are extracted), '|'-separated */
 typedef struct { const char *dir; unsigned console; const char *exts; } CsSystem;
 const CsSystem *cs_system(const char *dir);   /* NULL for systems without achievements (scummvm) and unknown names */

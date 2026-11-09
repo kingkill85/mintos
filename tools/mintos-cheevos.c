@@ -42,11 +42,11 @@ int main(int argc, char **argv) {
         /* own scratch dir: archive_prepare must not clobber a running game's /tmp/rgarch-rom */
         mkdir("/tmp/mintos-cheevos", 0755);
         setenv("TMPDIR", "/tmp/mintos-cheevos", 1);
-        char lock[1024];
-        if (!cs_path(lock, sizeof lock, "sync.lock") && (access(lock, F_OK) == 0 || cs_write("sync.lock", "", 0) == 0)) {   /* never replaced afterwards: the lock is on this inode */
-            int fd = open(lock, O_RDONLY);
-            if (fd >= 0) flock(fd, LOCK_EX);   /* one sync at a time; released when we exit */
-        }
+        char lock[1024], dir[1024];
+        snprintf(dir, sizeof dir, "%s/", cs_dir());   /* mkdir -p of the data dir, then the lock file created in place: never replaced, so the lock stays on one inode */
+        for (char *s = dir + 1; *s; s++) if (*s == '/') { *s = 0; mkdir(dir, 0755); *s = '/'; }
+        int fd = cs_path(lock, sizeof lock, "sync.lock") ? -1 : open(lock, O_RDWR | O_CREAT, 0600);
+        if (fd < 0 || flock(fd, LOCK_EX)) { puts("Fehler: Sperre"); return 1; }   /* one sync at a time; released when we exit */
         CsReport r;
         int rc = cs_sync(cs_http_post, "/storage/roms", &r);
         if (rc == 0) { printf("%d Spiele, %d Erfolge hochgeladen\n", r.games, r.uploaded); return 0; }
