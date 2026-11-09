@@ -22,5 +22,9 @@ int  ui_text(Ui *ui, TTF_Font *f, const char *s, int x, int cy, SDL_Color c, int
 /* hint group "[button] WORD"...: left-aligned at left, or right-aligned at right if right != 0 */
 int  ui_hints(Ui *ui, int left, int right, const char *pairs[][2], int n);
 void ui_battery(Ui *ui);                                                 /* circle, top right */
+/* battery plus Wi-Fi/Bluetooth circles left of it while they are on (white: connected,
+ * grey: on); returns the x where they begin */
+int  ui_status(Ui *ui);
+int  ui_status_poll(void);   /* 1 when Wi-Fi/Bluetooth state changed (checked once a second) */
 /* top bar: where we are (small text in a bar pill, top left); returns its width */
 int  ui_title(Ui *ui, const char *s, int maxw);

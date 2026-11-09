@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <dirent.h>
+#include <math.h>
+#include <unistd.h>
 
 #define PSU "/sys/class/power_supply"
 
@@ -155,4 +157,82 @@ int ui_title(Ui *ui, const char *s, int maxw) {
     ui_pill(ui, PAD, PAD, tw + 32, HINT, UI_BAR);
     ui_text(ui, ui->btn, s, PAD + 16, PAD + HINT / 2, UI_LIGHT, inner);
     return tw + 32;
+}
+
+/* ---- Wi-Fi / Bluetooth status (circles left of the battery) ---- */
+
+/* 0 off (not shown), 1 on, 2 connected. Off = driver unloaded (mintos-wifi/-bt). */
+static int wifi_state(void) {
+    if (access("/sys/class/net/wlan0", F_OK)) return 0;
+    return read_int("/sys/class/net/wlan0/carrier") == 1 ? 2 : 1;
+}
+
+static int bt_state(void) {
+    DIR *d = opendir("/sys/class/bluetooth");
+    if (!d) return 0;
+    int st = 0;
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        if (!strncmp(e->d_name, "hci", 3) && !strchr(e->d_name, ':') && st < 1) st = 1;
+        if (!strncmp(e->d_name, "hci", 3) && strchr(e->d_name, ':')) st = 2;   /* hci0:N = a connection */
+    }
+    closedir(d);
+    return st;
+}
+
+static int st_wifi, st_bt;
+static Uint32 st_at;
+
+int ui_status_poll(void) {
+    Uint32 now = SDL_GetTicks();
+    if (st_at && now - st_at < 1000) return 0;
+    st_at = now ? now : 1;
+    int w = wifi_state(), b = bt_state(), changed = w != st_wifi || b != st_bt;
+    st_wifi = w; st_bt = b;
+    return changed;
+}
+
+static void thick_line(Ui *ui, float x0, float y0, float x1, float y1) {
+    for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -1; dy <= 1; dy++)
+            if (!dx || !dy) SDL_RenderDrawLineF(ui->ren, x0 + dx * 0.7f, y0 + dy * 0.7f, x1 + dx * 0.7f, y1 + dy * 0.7f);
+}
+
+/* Wi-Fi fan: dot and three arcs */
+static void icon_wifi(Ui *ui, int cx, int cy) {
+    float ox = cx, oy = cy + 8;
+    for (int r = 0; r < 3; r++) {
+        float rad = 6 + r * 5.5f;
+        for (float a = -0.78f; a <= 0.78f; a += 0.02f)
+            for (float t = 0; t < 2.6f; t += 0.5f)
+                SDL_RenderDrawPointF(ui->ren, ox + sinf(a) * (rad + t), oy - cosf(a) * (rad + t));
+    }
+    SDL_Rect dot = {cx - 2, cy + 5, 4, 4};
+    SDL_RenderFillRect(ui->ren, &dot);
+}
+
+/* Bluetooth rune */
+static void icon_bt(Ui *ui, int cx, int cy) {
+    float x = cx - 1, t = cy - 10, b = cy + 10;
+    thick_line(ui, x, t, x, b);
+    thick_line(ui, x, t, x + 6, t + 5);
+    thick_line(ui, x + 6, t + 5, x - 6, cy + 5);
+    thick_line(ui, x, b, x + 6, b - 5);
+    thick_line(ui, x + 6, b - 5, x - 6, cy - 5);
+}
+
+int ui_status(Ui *ui) {
+    ui_status_poll();   /* throttled to once a second */
+    ui_battery(ui);
+    int x = ui->w - PAD - HINT;
+    const int states[2] = {st_wifi, st_bt};
+    for (int i = 0; i < 2; i++) {
+        if (!states[i]) continue;
+        x -= HINT + 8;
+        ui_pill(ui, x, PAD, HINT, HINT, UI_BAR);
+        ui_set(ui, states[i] == 2 ? UI_WHITE : UI_MID);
+        if (i == 0) icon_wifi(ui, x + HINT / 2, PAD + HINT / 2);
+        else icon_bt(ui, x + HINT / 2, PAD + HINT / 2);
+    }
+    return x;
 }

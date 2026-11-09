@@ -226,8 +226,7 @@ static int saved_level, saved_sel, saved_top;   /* where F was pressed */
 
 /* header: where we are (dark pill, top left), position "3/41", battery */
 static void draw_header(const char *where, int pos, int n) {
-    ui_battery(&ui);
-    int right = ui.w - PAD - HINT - 14;
+    int right = ui_status(&ui) - 14;
     if (n > 0) {
         char c[24];
         snprintf(c, sizeof c, "%d/%d", pos + 1, n);
@@ -503,6 +502,7 @@ int main(void) {
         }
         if (in_settings && settings_poll()) dirty = 1;
         if (osd_poll()) { dirty = 1; if (in_settings) settings_refresh(); }
+        if (ui_status_poll()) dirty = 1;
         Uint32 now = SDL_GetTicks();
         if (held && now - held_since > 350 && now - last_rep > (in_settings ? 120 : 70)) {
             if (in_settings)

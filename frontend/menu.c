@@ -171,8 +171,8 @@ void menu_draw(Ui *ui, Menu *m, const char *title, SDL_Texture *preview) {
     /* title pill, battery */
     char where[300];
     snprintf(where, sizeof where, m->page ? "%s › Optionen" : "%s", title);
-    ui_title(ui, where, ui->w - 2 * PAD - HINT - 14);
-    ui_battery(ui);
+    int right = ui_status(ui);
+    ui_title(ui, where, right - 14 - PAD);
 
     if (m->page) {
         draw_options(ui, m);
