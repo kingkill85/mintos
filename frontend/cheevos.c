@@ -206,6 +206,7 @@ bool cheevos_start(Core *c, const char *system, const char *rom) {
 
     rc_client_user_game_summary_t s;
     rc_client_get_user_game_summary(client, &s);
+    if (!s.num_core_achievements) { cheevos_stop(); return false; }   /* nothing to earn: no toast, no menu item */
     char t[64];
     snprintf(t, sizeof t, "%u/%u Erfolge", s.num_unlocked_achievements, s.num_core_achievements);
     osd_toast(t);

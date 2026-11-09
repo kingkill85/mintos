@@ -41,7 +41,7 @@ und lädt neue hoch. rgarch selbst geht nie ins Netz.
 
 ```
                  WLAN                         SD: /storage/.config/mintos/cheevos/
-retroachievements.org  <--->  mintos-cheevos  --->  token, hashes.tsv, game/<id>.json,
+retroachievements.org  <--->  mintos-cheevos  --->  token, hashes.tsv, game/<hash>.json,
                                 (Dienst, C)            user/<id>.json
                                      ^                         |
                                      | queue/*.json            v (nur lesen)
@@ -75,7 +75,7 @@ Ein Programm mit Unterbefehlen, HTTPS über libcurl.
      bekannter RetroAchievements-Konsole, Tabelle Ordner → Konsolen-ID im Programm) die
      Prüfsumme mit `rc_hash`, gespeichert in `hashes.tsv` (Pfad, Größe, mtime, Hash, Spiel-ID).
      Unveränderte Dateien werden nicht neu berechnet.
-  3. **Welche es gibt**: pro Spiel-ID die Erfolgsliste (`patch`) nach `game/<id>.json`,
+  3. **Welche es gibt**: pro Spiel-ID die Erfolgsliste (`patch`) nach `game/<hash>.json`,
      neu geholt, wenn älter als 7 Tage oder noch nicht da.
   4. **Welche man hat**: pro Spiel-ID die Freischaltungen des Kontos (`r=unlocks`) nach
      `user/<id>.json`, die rohe Antwort `{"Success":true,"UserUnlocks":[...]}`. Das Werkzeug ruft
@@ -98,10 +98,10 @@ Nur aktiv, wenn `token` existiert und der Schalter in `settings.cfg` an ist.
 - **Kein Netz in rgarch**: `rc_client` bekommt eine eigene Server-Funktion. Sie beantwortet
   die Anfragen aus den Dateien:
   - login → aus `token`,
-  - patch → `game/<id>.json`,
+  - patch → `game/<hash>.json`,
   - startsession → rgarch baut die Antwort offline aus `user/<id>.json` (Unlocks) und den lokalen Freischaltungen,
   - awardachievement → schreibt `queue/<zeit>-<id>.json` (Spiel, Erfolg, Hash, Zeitpunkt)
-    und antwortet „ok“; zusätzlich wird der Erfolg in `user/<id>.json` eingetragen, damit er
+    und antwortet „ok“; zusätzlich wird der Erfolg in `local/<gid>.txt` eingetragen, damit er
     beim nächsten Start schon zählt.
   Andere Anfragen (ping, Bestenlisten) werden mit „ok“ ignoriert.
 - **Speicher**: rgarch übernimmt `RETRO_ENVIRONMENT_SET_MEMORY_MAPS` (jetzt nur mit `true`
@@ -135,8 +135,8 @@ Neuer Punkt „RetroAchievements“:
 ## Tests
 
 - Host (`frontend/test/run.sh`): Test-Core mit einem Speicherbyte, das sich ändert; eine
-  Test-Erfolgsliste in `game/<id>.json`. Prüft: Erfolg löst aus, Queue-Datei entsteht,
-  `user/<id>.json` aktualisiert, nach Laden eines Spielstands kein falsches Auslösen.
+  Test-Erfolgsliste in `game/<hash>.json`. Prüft: Erfolg löst aus, Queue-Datei entsteht,
+  `local/<gid>.txt` aktualisiert, nach Laden eines Spielstands kein falsches Auslösen.
 - Host: `mintos-cheevos sync` gegen einen kleinen lokalen Test-Server (aufgezeichnete
   Antworten, wie die iwd-Daten in `os/test/`): Upload + Löschen der Queue, Netzfehler lässt
   sie liegen, Hash-Cache wird wiederverwendet.

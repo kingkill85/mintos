@@ -259,7 +259,7 @@ static int save_rows(const Row *rows, int n) {
 }
 
 static int by_hash(const void *a, const void *b) {
-    return strcmp((*(const rc_api_hash_library_entry_t *const *)a)->hash, (*(const rc_api_hash_library_entry_t *const *)b)->hash);
+    return strcasecmp((*(const rc_api_hash_library_entry_t *const *)a)->hash, (*(const rc_api_hash_library_entry_t *const *)b)->hash);
 }
 
 /* one hashlibrary request for console; sets gid of the rows that need it. 0 ok, -1 no network */
@@ -438,11 +438,23 @@ static void clean_local(unsigned gid, const rc_api_fetch_user_unlocks_response_t
     else { char p[1024]; if (!cs_path(p, sizeof p, "%s", rel)) unlink(p); }
 }
 
+/* a stored game/<hash>.json that still parses as a successful achievementsets answer */
+static int game_file_ok(const char *rel) {
+    char *body = cs_read(rel, NULL);
+    if (!body) return 0;
+    rc_api_fetch_game_sets_response_t resp;
+    rc_api_server_response_t s = srv(body, 200);
+    int ok = rc_api_process_fetch_game_sets_server_response(&resp, &s) == RC_OK && resp.response.succeeded;
+    rc_api_destroy_fetch_game_sets_response(&resp);
+    free(body);
+    return ok;
+}
+
 /* 0 ok, 1 token invalid, -1 no network */
 static int fetch_game(cs_http_fn http, const char *user, const char *token, const char *hash, CsReport *rep) {
     char rel[96], p[1024]; struct stat st;
     snprintf(rel, sizeof rel, "game/%s.json", hash);
-    if (!cs_path(p, sizeof p, "%s", rel) && !stat(p, &st) && time(NULL) - st.st_mtime < GAME_MAX_AGE) return 0;
+    if (!cs_path(p, sizeof p, "%s", rel) && !stat(p, &st) && time(NULL) - st.st_mtime < GAME_MAX_AGE && game_file_ok(rel)) return 0;
     rc_api_fetch_game_sets_request_t gp = { user, token, 0, hash };
     rc_api_request_t rq;
     if (rc_api_init_fetch_game_sets_request(&rq, &gp) != RC_OK) return 0;

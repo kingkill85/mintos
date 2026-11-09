@@ -4,5 +4,6 @@ Description=RetroAchievements sync
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/mintos-cheevos sync
+SuccessExitStatus=1 2
 Nice=19
 IOSchedulingClass=idle

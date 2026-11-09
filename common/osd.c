@@ -64,7 +64,7 @@ void osd_mark(void) { reread(); mark_seq = cur_seq; }
 
 int osd_used_since_mark(void) { reread(); return cur_seq != mark_seq && cur_kind == 'b'; }
 
-/* a bar pill centred just below the top bar: "HELLIGKEIT" / "LAUTSTÄRKE" and 10 steps as in the settings */
+/* the toast text in a pill centred horizontally at y */
 static void draw_toast(Ui *ui, int y) {
     if (!toast[0] || !ui->btn) return;
     int tw = ui_text_w(ui->btn, toast), maxw = ui->w - 2 * PAD - 40;
@@ -75,7 +75,8 @@ static void draw_toast(Ui *ui, int y) {
     ui_text(ui, ui->btn, toast, x + 20, y + HINT / 2, UI_WHITE, tw);
 }
 
-/* the volume/brightness bar just below the top bar, a toast below it (or in its place) */
+/* the volume/brightness bar just below the top bar ("HELLIGKEIT" / "LAUTSTÄRKE" and 10 steps as in the settings),
+ * a toast below it (or in its place) */
 void osd_draw(Ui *ui) {
     int y0 = PAD + HINT + 12;
     draw_toast(ui, visible ? y0 + HINT + 12 : y0);

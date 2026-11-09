@@ -16,6 +16,7 @@
 
 #define H1 "0123456789abcdef0123456789abcdef"   /* game.tst -> game 9 */
 #define H2 "fedcba9876543210fedcba9876543210"   /* rf5.tst  -> game 10 */
+#define H4 "00000000000000000000000000000004"   /* empty.tst: game without achievements */
 #define H3 "00000000000000000000000000000003"   /* nogame.tst: hash known, game/<hash>.json missing */
 
 static char root[] = "/tmp/rgarch-cheevos-XXXXXX";
@@ -67,12 +68,13 @@ int main(void) {
     setenv("RGARCH_ROOT", root, 1);
     unsetenv("MINTOS_CHEEVOS_DIR");
     snprintf(dir, sizeof dir, "%s/storage/.config/mintos/cheevos", root);
-    char rom[1024], rf5[1024], nogame[1024], cmd[4096], p[1200];
+    char rom[1024], rf5[1024], nogame[1024], empty[1024], cmd[4096], p[1200];
     snprintf(rom, sizeof rom, "%s/storage/roms/nes/game.tst", root);
     snprintf(rf5, sizeof rf5, "%s/storage/roms/nes/rf5.tst", root);
+    snprintf(empty, sizeof empty, "%s/storage/roms/nes/empty.tst", root);
     snprintf(nogame, sizeof nogame, "%s/storage/roms/nes/nogame.tst", root);
-    snprintf(cmd, sizeof cmd, "mkdir -p '%s/storage/roms/nes' '%s' && echo x > '%s' && echo y > '%s' && echo z > '%s'",
-             root, dir, rom, rf5, nogame);
+    snprintf(cmd, sizeof cmd, "mkdir -p '%s/storage/roms/nes' '%s' && echo x > '%s' && echo y > '%s' && echo z > '%s' && echo w > '%s'",
+             root, dir, rom, rf5, nogame, empty);
     CHECK_INT(system(cmd), 0);
 
     put("token", "User\nApiToken\n");
@@ -87,15 +89,23 @@ int main(void) {
     hashline(f, rom, H1, 9);
     hashline(f, rf5, H2, 10);
     hashline(f, nogame, H3, 11);
+    hashline(f, empty, H4, 12);
     fclose(f);
 
     Core c = {.on_video = on_video, .on_audio = on_audio};
     CHECK_INT(core_load(&c, "./testcore.so", rom), 0);
 
+    /* a game with no core achievements: no toast, no session, no list */
+    put("game/" H4 ".json", GAME(12, ""));
+    osd_toast("");
+    CHECK(!cheevos_start(&c, "nes", empty));
+    CHECK_STR(osd_toast_text(), "");
+    CheevoItem it[8];
+    CHECK_INT(cheevos_list(it, 8), 0);
+
     /* start: logged in and loaded from the files, toast with the count */
     CHECK(cheevos_start(&c, "nes", rom));
     CHECK_STR(osd_toast_text(), "0/2 Erfolge");
-    CheevoItem it[8];
     CHECK_INT(cheevos_list(it, 8), 2);
 
     /* 5 frames: 101 unlocks -> queued for upload, kept locally, toast */

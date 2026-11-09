@@ -4,6 +4,7 @@
 #include "../../tools/cheevos_sync.h"
 #include "cheevos_store.h"
 #include "rc_consoles.h"
+#include <ctype.h>
 #include <stdarg.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -54,6 +55,8 @@ static int fake(const char *url, const char *post, char **body, int *status) {
         if (hl_mode == 1) *body = strdup("{\"Success\":false,\"Error\":\"nope\"}");
         else if (hl_mode == 2) *body = strdup("<html>captive portal</html>");
         else *body = strstr(post, "c=7") ? load("hashlibrary-7.json") : strdup("{\"Success\":true,\"MD5List\":[]}");
+        char *hp = strstr(*body, HASH);   /* the server may answer with upper-case hashes: compared case-insensitively */
+        for (int i = 0; hp && i < 32; i++) hp[i] = (char)toupper((unsigned char)hp[i]);
     }
     else if (!strcmp(name, "achievementsets")) *body = load("achievementsets.json");
     else if (!strcmp(name, "unlocks")) *body = load(unlocks_bad ? "unlocks-badtoken.json" : "unlocks.json");
@@ -152,6 +155,17 @@ int main(void) {
     CHECK_INT(r.hashed, 0); CHECK_INT(r.games, 1);
     CHECK_INT(called("hashlibrary"), 0);
     CHECK_INT(called("achievementsets"), 0);
+
+    /* a stored game file that is not an achievementsets answer is fetched again although it is fresh */
+    cs_path(p, sizeof p, "game/%s.json", HASH);
+    put(p, "<html>captive portal</html>", 27);
+    ncalls = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), 0);
+    CHECK_INT(called("achievementsets"), 1);
+    { char *g = cs_read("game/" HASH ".json", NULL); CHECK(g && strstr(g, "\"Sets\"")); free(g); }
+    ncalls = 0;
+    CHECK_INT(cs_sync(fake, roms, &r), 0);
+    CHECK_INT(called("achievementsets"), 0);   /* valid again: fresh */
 
     /* queue: ok */
     long now = time(NULL);

@@ -222,6 +222,7 @@ static bool run_menu(int *slot, bool cheevos_on) {
                 if (!clist) clist = malloc(sizeof *clist * CHEEVO_MAX);
                 int n = clist ? cheevos_list(clist, CHEEVO_MAX) : 0;
                 menu_set_cheevo_list(&m, clist, n);
+                if (n <= 0) m.msg = "Keine Erfolge";
                 break;
             }
             case M_RESET:
