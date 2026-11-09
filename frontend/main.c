@@ -55,6 +55,9 @@ static int load_cfg(void) {
     int r = config_load(p, sysname, &cfg);
     snprintf(p, sizeof p, "%s%s", root(), USER_CONFIG_FILE);
     config_merge(p, sysname, &cfg);
+    char fr[1024];
+    snprintf(fr, sizeof fr, "%s%s", root(), FRAMES_FILE);
+    config_frame(fr, p, sysname, &cfg);
     return r;
 }
 

@@ -14,7 +14,7 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
   Starting a game replaces the process with `launch.sh`; systemd restarts the list afterwards.
 - **Einstellungen** (F key anywhere in the list, F or B closes, `launcher/settings.c`): brightness, volume, WLAN (networks,
   password via on-screen keyboard `launcher/keyboard.c`), Bluetooth (pair headphones/controllers),
-  Spiel-Optionen (per system Bild/Filter/Rahmen in `rgarch/user.cfg` over `systems.cfg`), screen-off
+  Spiel-Optionen (per system Bild/Filter/Rahmen in `rgarch/user.cfg` over `systems.cfg`; Rahmen chooses from `rgarch/frames.cfg`, TV frames in `retroarch/overlays/tv/`), screen-off
   timer, info, reboot/power-off. Slow commands (`mintos-wifi`, `mintos-bt`) run as background jobs
   (`launcher/job.c`). Off switches stop the services and unload the drivers. State: `/storage/.config/mintos/settings.cfg`.
 - Kernels (Linux 6.12.116, cross-built with `os/build-kernel*.sh`):

@@ -113,3 +113,25 @@ int config_set(const char *file, const char *section, const char *key, const cha
     if (fclose(out)) return -1;
     return rename(tmp, file);
 }
+
+int config_each(const char *file, const char *section, void (*fn)(void *, const char *, const char *), void *arg) {
+    return each(file, section, fn, arg);
+}
+
+int config_frame_parse(const char *val, char *png, int n, int *x, int *y, int *w, int *h) {
+    char p[256];
+    if (sscanf(val, "%255s %d %d %d %d", p, x, y, w, h) != 5 || *w <= 0 || *h <= 0) return -1;
+    snprintf(png, n, "%s", p);
+    return 0;
+}
+
+void config_frame(const char *frames_file, const char *user_file, const char *system, SystemCfg *c) {
+    char label[96], val[300], png[256];
+    if (config_get(user_file, system, "frame", label, sizeof label)) return;
+    if (!strcmp(label, "none")) { c->overlay[0] = 0; return; }
+    int x, y, w, h;
+    if (config_get(frames_file, system, label, val, sizeof val)
+        || config_frame_parse(val, png, sizeof png, &x, &y, &w, &h)) return;   /* unknown: keep the default */
+    snprintf(c->overlay, sizeof c->overlay, "%s%s", OVERLAY_DIR, png);
+    c->scale = SCALE_CUSTOM; c->cx = x; c->cy = y; c->cw = w; c->ch = h;
+}

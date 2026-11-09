@@ -393,8 +393,8 @@ static void change(Item *it, int d) {
     }
     case I_GAMEOPT: {
         const char *dir = sys_dirs[cur_sys];
-        int n = gameopt_count(it->arg);
-        gameopt_set(USER_CONFIG_FILE, dir, it->arg, cycle(gameopt_get(USER_CONFIG_FILE, dir, it->arg), d, n));
+        int cur = gameopt_get(USER_CONFIG_FILE, dir, it->arg);   /* reads this system's frame list first */
+        gameopt_set(USER_CONFIG_FILE, dir, it->arg, cycle(cur, d, gameopt_count(it->arg)));
         break;
     }
     case I_BT_POWER:
