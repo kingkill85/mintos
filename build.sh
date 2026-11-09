@@ -21,14 +21,19 @@ if [ ! -e "$SR/libSDL2_image.so" ]; then
   scp -q "$HOST:/usr/lib/aarch64-linux-gnu/libSDL2_image-2.0.so.0" "$SR/"
   ln -sf libSDL2_image-2.0.so.0 "$SR/libSDL2_image.so"
 fi
+if [ ! -e "$SR/libcurl.so" ]; then   # the device only has the gnutls flavour
+  scp -q "$HOST:/usr/lib/aarch64-linux-gnu/libcurl-gnutls.so.4" "$SR/" && ln -sf libcurl-gnutls.so.4 "$SR/libcurl.so"
+fi
 VER=$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)
 CC="zig cc -target aarch64-linux-gnu.2.38 -O2 -Wall -DMINTOS_VERSION=\\\"$VER\\\""
-nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev systemd.dev pkg-config --run "
+# rcheevos: defines, include path, sources (rgarch and mintos-cheevos)
+RCHEEVOS="-DRC_DISABLE_LUA -Ithird_party/rcheevos/include -Ithird_party/rcheevos/src third_party/rcheevos/src/*.c third_party/rcheevos/src/*/*.c"
+nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev systemd.dev curl.dev pkg-config --run "
   set -e
   CF=\$(pkg-config --cflags sdl2 SDL2_ttf SDL2_image zlib)
   $CC \$CF -Icommon -Ifrontend launcher/rglauncher.c launcher/settings.c launcher/job.c launcher/keyboard.c common/ui.c common/settings.c common/osd.c frontend/config.c frontend/gameopts.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -lm -Wl,--allow-shlib-undefined
   echo 'built build/rglauncher'
-  $CC \$CF -Ifrontend -Icommon -DRC_DISABLE_LUA -Ithird_party/rcheevos/include -Ithird_party/rcheevos/src \$(ls frontend/*.c common/*.c third_party/rcheevos/src/*.c third_party/rcheevos/src/*/*.c 2>/dev/null) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -lz -ldl -lm -Wl,--allow-shlib-undefined
+  $CC \$CF -Ifrontend -Icommon $RCHEEVOS \$(ls frontend/*.c common/*.c) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -lz -ldl -lm -Wl,--allow-shlib-undefined
   echo 'built build/rgarch'
   # system tools (C, replace the former Python helpers) -> build/tools/, installed to /usr/local/sbin
   T=build/tools; mkdir -p \$T/gen
@@ -38,6 +43,7 @@ nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev systemd.dev pkg-config --
   \$TC \$(pkg-config --cflags libsystemd) tools/mintos-wifi.c tools/wifi.c tools/util.c -o \$T/mintos-wifi -L$SR -lsystemd -Wl,--allow-shlib-undefined
   \$TC tools/mintos-bt.c tools/bt.c tools/util.c -o \$T/mintos-bt
   \$TC \$(pkg-config --cflags zlib) tools/fbgrab.c tools/fb.c -o \$T/fbgrab -L$SR -lz
+  \$TC \$(pkg-config --cflags libcurl) -Ifrontend -Icommon $RCHEEVOS tools/mintos-cheevos.c tools/cheevos_sync.c tools/cheevos_http.c common/cheevos_store.c frontend/archive.c -o \$T/mintos-cheevos -L$SR -lcurl -Wl,--allow-shlib-undefined
   \$TC tools/mi2-copyprotect.c tools/fb.c tools/util.c -o \$T/mi2-copyprotect
   \$TC -I\$T/gen tools/rg353-press.c tools/util.c -o \$T/rg353-press
   ln -sf rg353-press \$T/rg353-type

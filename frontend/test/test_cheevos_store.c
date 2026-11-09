@@ -1,4 +1,4 @@
-// uses: common/cheevos_store.c
+// uses: common/cheevos_store.c -Ithird_party/rcheevos/include
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>

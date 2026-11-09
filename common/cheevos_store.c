@@ -1,4 +1,5 @@
 #include "cheevos_store.h"
+#include "rc_consoles.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -172,4 +173,51 @@ int cs_local_unlocks(unsigned game_id, unsigned *ids, long *when, int max) {
     while (n < max && fscanf(f, "%u %ld", &a, &t) == 2) { ids[n] = a; when[n] = t; n++; }
     fclose(f);
     return n;
+}
+
+/* ---- systems ---- */
+
+static const CsSystem systems[] = {
+    {"gb", RC_CONSOLE_GAMEBOY, "gb|dmg"},
+    {"gbc", RC_CONSOLE_GAMEBOY_COLOR, "gbc|gb"},
+    {"gba", RC_CONSOLE_GAMEBOY_ADVANCE, "gba"},
+    {"gamegear", RC_CONSOLE_GAME_GEAR, "gg"},
+    {"ngp", RC_CONSOLE_NEOGEO_POCKET, "ngp|ngc"},
+    {"ngpc", RC_CONSOLE_NEOGEO_POCKET, "ngc|ngp"},
+    {"wonderswan", RC_CONSOLE_WONDERSWAN, "ws|wsc"},
+    {"wonderswancolor", RC_CONSOLE_WONDERSWAN, "wsc|ws"},
+    {"atarilynx", RC_CONSOLE_ATARI_LYNX, "lnx"},
+    {"virtualboy", RC_CONSOLE_VIRTUAL_BOY, "vb|vboy"},
+    {"nes", RC_CONSOLE_NINTENDO, "nes|fds|unf|unif"},
+    {"famicom", RC_CONSOLE_NINTENDO, "nes|fds|unf|unif"},
+    {"fds", RC_CONSOLE_FAMICOM_DISK_SYSTEM, "fds"},
+    {"snes", RC_CONSOLE_SUPER_NINTENDO, "smc|sfc|swc|fig|bs|st"},
+    {"sfc", RC_CONSOLE_SUPER_NINTENDO, "smc|sfc|swc|fig|bs|st"},
+    {"mastersystem", RC_CONSOLE_MASTER_SYSTEM, "sms"},
+    {"megadrive", RC_CONSOLE_MEGA_DRIVE, "md|gen|smd|bin"},
+    {"megadrive-japan", RC_CONSOLE_MEGA_DRIVE, "md|gen|smd|bin"},
+    {"genesis", RC_CONSOLE_MEGA_DRIVE, "md|gen|smd|bin"},
+    {"sg-1000", RC_CONSOLE_SG1000, "sg"},
+    {"segacd", RC_CONSOLE_SEGA_CD, "cue|iso|chd"},
+    {"megacd", RC_CONSOLE_SEGA_CD, "cue|iso|chd"},
+    {"sega32x", RC_CONSOLE_SEGA_32X, "32x"},
+    {"pcengine", RC_CONSOLE_PC_ENGINE, "pce|sgx"},
+    {"tg16", RC_CONSOLE_PC_ENGINE, "pce|sgx"},
+    {"pcenginecd", RC_CONSOLE_PC_ENGINE_CD, "cue|chd"},
+    {"tg16cd", RC_CONSOLE_PC_ENGINE_CD, "cue|chd"},
+    {"atari2600", RC_CONSOLE_ATARI_2600, "a26|bin"},
+    {"atari7800", RC_CONSOLE_ATARI_7800, "a78"},
+    {"arcade", RC_CONSOLE_ARCADE, "zip"},
+    {"fbneo", RC_CONSOLE_ARCADE, "zip"},
+    {"neogeo", RC_CONSOLE_ARCADE, "zip"},
+    {"cps1", RC_CONSOLE_ARCADE, "zip"},
+    {"cps2", RC_CONSOLE_ARCADE, "zip"},
+    {"cps3", RC_CONSOLE_ARCADE, "zip"},
+    {"psx", RC_CONSOLE_PLAYSTATION, "cue|iso|chd|pbp|m3u"},
+};
+
+const CsSystem *cs_system(const char *dir) {
+    for (size_t i = 0; i < sizeof systems / sizeof *systems; i++)
+        if (!strcmp(systems[i].dir, dir)) return &systems[i];
+    return NULL;
 }
