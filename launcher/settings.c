@@ -1,5 +1,5 @@
 /* Einstellungen: one list per page, values on the right, changed with left/right.
- *   Einstellungen: Helligkeit, Lautstärke, WLAN ›, Spiel-Optionen ›, Bildschirm aus, Info ›,
+ *   Einstellungen: Helligkeit, Lautstärke, WLAN ›, Bluetooth ›, RetroAchievements ›, Spiel-Optionen ›, Bildschirm aus, Info ›,
  *                  Neustart, Ausschalten
  *   WLAN: on/off, networks (A connects, X forgets; new networks ask for the password)
  *   Bluetooth: on/off, devices (A pairs+connects / disconnects, X forgets)
@@ -9,6 +9,7 @@
 #include "../common/settings.h"
 #include "gameopts.h"
 #include "job.h"
+#include "../common/cheevos_store.h"
 #include "keyboard.h"
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -25,10 +26,12 @@
 #endif
 
 typedef enum { I_BRIGHT, I_VOLUME, I_WIFI, I_GAMEOPTS, I_SCREENOFF, I_INFO, I_REBOOT, I_POWEROFF, I_TEXT, I_SYSTEM,
-               I_GAMEOPT, I_WIFI_POWER, I_NET, I_BT, I_BT_POWER, I_DEV } ItemId;
-typedef enum { P_MAIN, P_INFO, P_SYSTEMS, P_GAME, P_WIFI, P_BT } Page;
+               I_GAMEOPT, I_WIFI_POWER, I_NET, I_BT, I_BT_POWER, I_DEV, I_CHEEVOS, I_CH_LOGIN, I_CH_ONOFF, I_CH_SYNC,
+               I_CH_LOGOUT } ItemId;
+typedef enum { P_MAIN, P_INFO, P_SYSTEMS, P_GAME, P_WIFI, P_BT, P_CHEEVOS } Page;
 enum { J_STATUS = 1, J_LIST, J_SCAN, J_CONNECT, J_FORGET, J_POWER,
-       B_STATUS, B_LIST, B_SCAN, B_CONNECT, B_DISCONNECT, B_FORGET, B_POWER };
+       B_STATUS, B_LIST, B_SCAN, B_CONNECT, B_DISCONNECT, B_FORGET, B_POWER,
+       C_LOGIN, C_SYNC, C_LOGOUT };
 
 typedef struct { ItemId id; char label[64]; char value[96]; int bar, arg, sig; } Item;   /* bar 0..10, sig 0..4, -1 none */
 
@@ -46,6 +49,9 @@ static int nnets, wifi_powered = -1, wifi_ready = 1, scanned, kb_on, net_sel;
 static Uint32 last_ws;   /* last Wi-Fi status: polled while the chip is still coming up */
 static char wifi_ssid[64], wifi_state[24];
 static Kb kb;
+enum { K_WIFI, K_USER, K_PASS };
+static int kb_for;      /* what the keyboard asks for */
+static char cuser[64];  /* RetroAchievements user name typed before the password */
 
 /* Bluetooth as last reported by mintos-bt */
 typedef struct { char mac[18], name[64], kind[8]; int paired, connected; } Dev;
@@ -122,6 +128,9 @@ static void build(void) {
         const char *bc = NULL;
         for (int i = 0; i < ndevs; i++) if (devs[i].connected) { bc = devs[i].name; break; }
         snprintf(it->value, sizeof it->value, "%s", bt_powered == 0 ? "Aus" : bc ? bc : bt_powered < 0 ? "" : "An");
+        it = add(I_CHEEVOS, "RetroAchievements");
+        char cu[64], ct[16];
+        snprintf(it->value, sizeof it->value, "%s", !cs_token(cu, sizeof cu, ct, sizeof ct) ? cu : "");
         add(I_GAMEOPTS, "Spiel-Optionen");
         it = add(I_SCREENOFF, "Bildschirm aus");
         snprintf(it->value, sizeof it->value, "%s", OFF_TXT[off_index()]);
@@ -153,6 +162,17 @@ static void build(void) {
                          : !strcmp(devs[i].kind, "audio") ? "Audio" : !strcmp(devs[i].kind, "input") ? "Controller" : "");
             }
             add(I_TEXT, bt_scanned ? "Neu suchen" : "Suche Geräte ...");
+        }
+    } else if (page == P_CHEEVOS) {
+        char cu[64], ct[16], tp[512];
+        if (cs_token(cu, sizeof cu, ct, sizeof ct)) add(I_CH_LOGIN, "Anmelden");
+        else {
+            if (!cs_path(tp, sizeof tp, "token.invalid") && !access(tp, F_OK)) add(I_CH_LOGIN, "Neu anmelden");
+            else { char l[96]; snprintf(l, sizeof l, "Konto: %s", cu); add(I_TEXT, l); }
+            Item *it = add(I_CH_ONOFF, "Erfolge");
+            snprintf(it->value, sizeof it->value, "%s", kv_get_int(SETTINGS_FILE, "cheevos", 1) ? "An" : "Aus");
+            add(I_CH_SYNC, "Jetzt abgleichen");
+            add(I_CH_LOGOUT, "Abmelden");
         }
     } else if (page == P_SYSTEMS) {
         for (int i = 0; i < nsys && nitems < 64; i++)
@@ -195,6 +215,7 @@ static void request(int kind, const char *tool, const char *args, const char *in
     pend.has = input ? 2 : 1;
     kick();
 }
+static void cheevos_job(int kind, const char *args, const char *input) { request(kind, "mintos-cheevos", args, input); }
 static void wifi_job(int kind, const char *args, const char *input) { request(kind, "mintos-wifi", args, input); }
 static void bt_job(int kind, const char *args) { request(kind, "mintos-bt", args, NULL); }
 
@@ -312,6 +333,12 @@ int settings_poll(void) {
         break;
     case B_DISCONNECT: case B_FORGET: need_bl = 1; break;
     case B_POWER: need_bs = need_bl = 1; break;
+    case C_LOGIN:
+        if (rc == 0 && !strncmp(out, "ok", 2)) { snprintf(msg, sizeof msg, "Angemeldet"); status = msg; }
+        else set_msg(out, "Anmeldung fehlgeschlagen");
+        break;
+    case C_SYNC: set_msg(out, "Abgleich fehlgeschlagen"); break;
+    case C_LOGOUT: snprintf(msg, sizeof msg, "Abgemeldet"); status = msg; sel = 0; break;
     }
     kick();
     build();
@@ -337,10 +364,14 @@ const char *settings_title(void) {
         snprintf(title, sizeof title, "WLAN › %s", nets[net_sel].name);
         return title;
     case P_BT: return "Einstellungen › Bluetooth";
+    case P_CHEEVOS:
+        if (!kb_on) return "Einstellungen › RetroAchievements";
+        return kb_for == K_USER ? "RetroAchievements › Benutzername" : "RetroAchievements › Passwort";
     default: return "Einstellungen";
     }
 }
 int settings_count(void) { return kb_on ? 0 : nitems; }
+const char *settings_label(int i) { return i >= 0 && i < nitems ? items[i].label : ""; }
 int settings_sel(void) { return sel; }
 const char *settings_status(void) { return status; }
 
@@ -355,7 +386,11 @@ void settings_hints(Ui *ui) {
     Item *it = &items[sel];
     const char *a = NULL;
     switch (it->id) {
-    case I_INFO: case I_GAMEOPTS: case I_SYSTEM: case I_WIFI: case I_BT: a = "ÖFFNEN"; break;
+    case I_INFO: case I_GAMEOPTS: case I_SYSTEM: case I_WIFI: case I_BT: case I_CHEEVOS: a = "ÖFFNEN"; break;
+    case I_CH_LOGIN: a = "ANMELDEN"; break;
+    case I_CH_SYNC: a = "ABGLEICHEN"; break;
+    case I_CH_LOGOUT: a = "ABMELDEN"; break;
+    case I_CH_ONOFF: a = "UMSCHALTEN"; break;
     case I_DEV: a = devs[it->arg].connected ? "TRENNEN" : "VERBINDEN"; break;
     case I_TEXT: a = page == P_BT && bt_scanned ? "SUCHEN" : NULL; break;
     case I_REBOOT: case I_POWEROFF: a = "OK"; break;
@@ -397,6 +432,7 @@ static void change(Item *it, int d) {
         gameopt_set(USER_CONFIG_FILE, dir, it->arg, cycle(cur, d, gameopt_count(it->arg)));
         break;
     }
+    case I_CH_ONOFF: kv_set(SETTINGS_FILE, "cheevos", kv_get_int(SETTINGS_FILE, "cheevos", 1) ? "0" : "1"); break;
     case I_BT_POWER:
         kv_set(SETTINGS_FILE, "bt", bt_powered ? "off" : NULL);
         bt_job(B_POWER, bt_powered ? "power off" : "power on");
@@ -428,7 +464,20 @@ int settings_key(int nav) {
     if (kb_on) {
         int r = kb_key(&kb, kb_nav(nav));
         if (r == KB_CANCEL) kb_on = 0;
-        else if (r == KB_DONE) {
+        else if (r == KB_DONE && kb_for == K_USER) {
+            if (!*kb.text) { snprintf(msg, sizeof msg, "Benutzername fehlt"); status = msg; return 0; }
+            snprintf(cuser, sizeof cuser, "%s", kb.text);
+            kb_init(&kb); kb.mask = 1; kb_for = K_PASS;
+        } else if (r == KB_DONE && kb_for == K_PASS) {
+            if (!*kb.text) { snprintf(msg, sizeof msg, "Passwort fehlt"); status = msg; return 0; }
+            char q[200], args[300];
+            sh_quote(q, sizeof q, cuser);
+            snprintf(args, sizeof args, "login %s", q);
+            snprintf(msg, sizeof msg, "Melde an ..."); status = msg;
+            kb_on = 0;
+            cheevos_job(C_LOGIN, args, kb.text);   /* the password only travels as the job's stdin */
+            memset(kb.text, 0, sizeof kb.text);
+        } else if (r == KB_DONE) {
             if (strlen(kb.text) < 8) { snprintf(msg, sizeof msg, "Mindestens 8 Zeichen"); status = msg; return 0; }
             kb_on = 0;
             connect_net(net_sel, kb.text);
@@ -446,7 +495,7 @@ int settings_key(int nav) {
     case NAV_B:
         if (page == P_MAIN) return 1;
         if (page == P_GAME) { page = P_SYSTEMS; sel = sys_sel; }
-        else if (page == P_WIFI || page == P_BT) { page = P_MAIN; sel = main_sel; need_ws = need_bs = 1; }
+        else if (page == P_WIFI || page == P_BT || page == P_CHEEVOS) { page = P_MAIN; sel = main_sel; need_ws = need_bs = 1; }
         else { page = P_MAIN; sel = main_sel; }
         break;
     case NAV_A:
@@ -458,7 +507,14 @@ int settings_key(int nav) {
         } else if (items[sel].id == I_BT) {
             main_sel = sel; page = P_BT; sel = 0; bt_scanned = 0;
             need_bs = need_bl = need_bscan = 1;
-        } else if (items[sel].id == I_WIFI_POWER || items[sel].id == I_BT_POWER) change(&items[sel], 1);
+        } else if (items[sel].id == I_CHEEVOS) { main_sel = sel; page = P_CHEEVOS; sel = 0; }
+        else if (items[sel].id == I_CH_LOGIN) { kb_init(&kb); kb_for = K_USER; kb_on = 1; status = NULL; }
+        else if (items[sel].id == I_CH_SYNC) { snprintf(msg, sizeof msg, "Gleiche ab ..."); status = msg; cheevos_job(C_SYNC, "sync", NULL); }
+        else if (items[sel].id == I_CH_LOGOUT) {
+            if (confirm) cheevos_job(C_LOGOUT, "logout", NULL);
+            else { confirm = 1; snprintf(msg, sizeof msg, "Nochmal A zum Abmelden"); status = msg; }
+        }
+        else if (items[sel].id == I_CH_ONOFF || items[sel].id == I_WIFI_POWER || items[sel].id == I_BT_POWER) change(&items[sel], 1);
         else if (items[sel].id == I_DEV) {
             Dev *d = &devs[items[sel].arg];
             char args[64];
@@ -471,7 +527,7 @@ int settings_key(int nav) {
         } else if (items[sel].id == I_NET) {
             Net *n = &nets[items[sel].arg];
             if (n->connected) break;
-            if (!n->known && !strcmp(n->type, "psk")) { net_sel = items[sel].arg; kb_init(&kb); kb_on = 1; status = NULL; }
+            if (!n->known && !strcmp(n->type, "psk")) { net_sel = items[sel].arg; kb_init(&kb); kb_for = K_WIFI; kb_on = 1; status = NULL; }
             else if (!n->known && strcmp(n->type, "open")) { snprintf(msg, sizeof msg, "Dieses Netz wird nicht unterstützt"); status = msg; }
             else connect_net(items[sel].arg, NULL);
         }
@@ -515,7 +571,7 @@ int settings_key(int nav) {
 /* label left, value (or a 10-step bar) right; the selection is a full-width white pill */
 void settings_draw(Ui *ui, int y0, int rows) {
     static int top;
-    if (kb_on) { kb_draw(ui, &kb, "Passwort", y0 - 8); return; }
+    if (kb_on) { kb_draw(ui, &kb, kb_for == K_USER ? "Benutzername" : "Passwort", y0 - 8); return; }
     if (sel < top) top = sel;
     if (sel >= top + rows) top = sel - rows + 1;
     if (top > nitems - rows) top = nitems - rows > 0 ? nitems - rows : 0;
@@ -544,13 +600,13 @@ void settings_draw(Ui *ui, int y0, int rows) {
         } else if (it->value[0]) {
             int maxw = (ui->w - 2 * PAD) / 2 + 40;
             char v[110];
-            int lr = it->id == I_SCREENOFF || it->id == I_GAMEOPT || it->id == I_WIFI_POWER || it->id == I_BT_POWER;   /* left/right changes it */
+            int lr = it->id == I_SCREENOFF || it->id == I_GAMEOPT || it->id == I_WIFI_POWER || it->id == I_BT_POWER || it->id == I_CH_ONOFF;   /* left/right changes it */
             snprintf(v, sizeof v, on && lr ? "< %s >" : "%s", it->value);
             int vw = ui_text_w(ui->small, v);
             if (vw > maxw) vw = maxw;
             ui_text(ui, ui->small, v, right - vw, cy, lr ? fg : dim, maxw);
             right -= vw + 16;
-        } else if (it->id == I_INFO || it->id == I_GAMEOPTS || it->id == I_SYSTEM || it->id == I_WIFI || it->id == I_BT) {
+        } else if (it->id == I_INFO || it->id == I_GAMEOPTS || it->id == I_SYSTEM || it->id == I_WIFI || it->id == I_BT || it->id == I_CHEEVOS) {
             ui_text(ui, ui->big, "›", right - ui_text_w(ui->big, "›"), cy, dim, 40);
         }
         ui_text(ui, ui->big, it->label, PAD + 24, cy, fg, right - PAD - 24);

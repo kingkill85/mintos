@@ -31,7 +31,7 @@ RCHEEVOS="-DRC_DISABLE_LUA -Ithird_party/rcheevos/include -Ithird_party/rcheevos
 nix-shell -p zig SDL2.dev SDL2_ttf SDL2_image zlib.dev systemd.dev curl.dev pkg-config --run "
   set -e
   CF=\$(pkg-config --cflags sdl2 SDL2_ttf SDL2_image zlib)
-  $CC \$CF -Icommon -Ifrontend launcher/rglauncher.c launcher/settings.c launcher/job.c launcher/keyboard.c common/ui.c common/settings.c common/osd.c frontend/config.c frontend/gameopts.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -lm -Wl,--allow-shlib-undefined
+  $CC \$CF -Icommon -Ifrontend launcher/rglauncher.c launcher/settings.c launcher/job.c launcher/keyboard.c common/ui.c common/settings.c common/osd.c common/cheevos_store.c -Ithird_party/rcheevos/include frontend/config.c frontend/gameopts.c -o build/rglauncher -L$SR -lSDL2 -lSDL2_ttf -lm -Wl,--allow-shlib-undefined
   echo 'built build/rglauncher'
   $CC \$CF -Ifrontend -Icommon $RCHEEVOS \$(ls frontend/*.c common/*.c) -o build/rgarch -L$SR -lSDL2 -lSDL2_ttf -lSDL2_image -lz -ldl -lm -Wl,--allow-shlib-undefined
   echo 'built build/rgarch'

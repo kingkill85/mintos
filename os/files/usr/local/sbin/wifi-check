@@ -14,11 +14,13 @@ if grep -qE '^wifi *= *off' /storage/.config/mintos/settings.cfg 2>/dev/null; th
 fi
 connected() { iwctl station wlan0 show 2>/dev/null | grep -qE 'State +connected'; }
 wait_connected() { for i in $(seq 1 "$1"); do connected && return 0; sleep 2; done; return 1; }
+# upload offline achievements once online (only with a RetroAchievements login)
+sync_cheevos() { [ -e /storage/.config/mintos/cheevos/token ] && systemctl start --no-block mintos-cheevos.service; return 0; }
 # the chip often fails its first probe at boot (sdio -110): then there is no wlan0 at all,
 # and waiting for a connection is pointless - reload right away
 for i in 1 2 3 4 5; do [ -e /sys/class/net/wlan0 ] && break; sleep 1; done
 if [ -e /sys/class/net/wlan0 ]; then
-  wait_connected 15 && { echo "wifi connected"; exit 0; }
+  wait_connected 15 && { echo "wifi connected"; sync_cheevos; exit 0; }
 else
   echo "no wlan0 after 5 s"
 fi
@@ -34,6 +36,6 @@ for try in 1 2 3 4 5 6 7 8; do
   modprobe rtw88_8821cs; sleep 4
   [ -e /sys/class/net/wlan0 ] || continue
   systemctl restart iwd
-  wait_connected 15 && { echo "wifi connected (try $try)"; exit 0; }
+  wait_connected 15 && { echo "wifi connected (try $try)"; sync_cheevos; exit 0; }
 done
 echo "wifi failed"; exit 1

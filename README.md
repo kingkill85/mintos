@@ -76,6 +76,24 @@ filter, overlay per system); n64, nds, psp and dreamcast still use RetroArch (ph
 Video follows the Retro Game Corps guides (640×480): GB/GBC/Game Gear with frame overlays,
 TV consoles full screen with a sharp filter, arcade/ScummVM in their own aspect, PS1 bilinear.
 
+## RetroAchievements
+
+rgarch shows achievements offline (softcore only). Sign in once under Einstellungen ›
+RetroAchievements (user name, then password; the password is only passed to the tool on stdin
+and never stored, only the API token is). The sync tool then downloads the achievement lists of
+the games on the device and what the account already has; rgarch reads only those local files,
+never opens a network connection, and a game start never waits for the network. Unlocks are
+queued while playing and uploaded at the next sync. The sync starts when the list starts and
+after wifi connects (`mintos-cheevos.service`, a oneshot unit with Nice 19 and idle IO), or on
+demand with "Jetzt abgleichen". "Erfolge" An/Aus switches the display and unlocking
+(`cheevos` in `settings.cfg`). In the game menu, "Erfolge" lists them.
+
+Data: `/storage/.config/mintos/cheevos/` (`token` mode 600, `game/`, `user/`, `queue/`,
+`local/`, `hashes.tsv`; `token.invalid` marks a rejected login: "Neu anmelden").
+Tool (`/usr/local/sbin/mintos-cheevos`): `login <user>` (password on stdin; prints `ok`,
+`Falsches Passwort` or `Kein Netz`), `logout`, `sync` (prints `<n> Spiele, <m> Erfolge
+hochgeladen`, `Neu anmelden` or `Kein Netz`).
+
 ## Everyday use
 
 ```sh

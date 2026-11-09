@@ -77,8 +77,9 @@ Ein Programm mit Unterbefehlen, HTTPS über libcurl.
      Unveränderte Dateien werden nicht neu berechnet.
   3. **Welche es gibt**: pro Spiel-ID die Erfolgsliste (`patch`) nach `game/<id>.json`,
      neu geholt, wenn älter als 7 Tage oder noch nicht da.
-  4. **Welche man hat**: pro Spiel-ID die Freischaltungen des Kontos (`startsession`/
-     `unlocks`) nach `user/<id>.json`.
+  4. **Welche man hat**: pro Spiel-ID die Freischaltungen des Kontos (`r=unlocks`) nach
+     `user/<id>.json`, die rohe Antwort `{"Success":true,"UserUnlocks":[...]}`. Das Werkzeug ruft
+     `startsession` nie auf.
   Schreiben immer über Temp-Datei + `rename`, damit rgarch nie eine halbe Datei liest.
   Ein Lock (`flock` auf `sync.lock`) verhindert zwei Abgleiche gleichzeitig.
 - Systemd: `mintos-cheevos.service` (oneshot, niedrige Priorität: `Nice=19`,
@@ -98,7 +99,7 @@ Nur aktiv, wenn `token` existiert und der Schalter in `settings.cfg` an ist.
   die Anfragen aus den Dateien:
   - login → aus `token`,
   - patch → `game/<id>.json`,
-  - startsession → `user/<id>.json`,
+  - startsession → rgarch baut die Antwort offline aus `user/<id>.json` (Unlocks) und den lokalen Freischaltungen,
   - awardachievement → schreibt `queue/<zeit>-<id>.json` (Spiel, Erfolg, Hash, Zeitpunkt)
     und antwortet „ok“; zusätzlich wird der Erfolg in `user/<id>.json` eingetragen, damit er
     beim nächsten Start schon zählt.

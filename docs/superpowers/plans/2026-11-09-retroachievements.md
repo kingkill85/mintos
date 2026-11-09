@@ -129,7 +129,7 @@ The file layout both programs agree on. Nothing in it talks to the network or to
     1. upload the queue,
     2. hash the ROMs,
     3. `game/<HASH>.json` (achievementsets, refreshed after 7 days),
-    4. `user/<game_id>.json` (startsession), and `login.json`.
+    4. `user/<game_id>.json` (the raw `r=unlocks` answer `{"Success":true,"UserUnlocks":[...]}`; the tool never calls startsession), and `login.json`.
   - `const CsSystem *cs_system(const char *dir)`, with `typedef struct { const char *dir; unsigned console; } CsSystem;`. The table maps each `[section]` of `systems.cfg` to its `RC_CONSOLE_*`:
     - `scummvm` → none,
     - `famicom` → NINTENDO,
@@ -198,7 +198,7 @@ The file layout both programs agree on. Nothing in it talks to the network or to
 - Offline server call (static in `cheevos.c`), routing on the `r=` value of `post_data`:
   - `login2` → `login.json`;
   - `achievementsets` → `game/<m>.json`;
-  - `startsession` → `user/<g>.json` with every `cs_local_unlocks` id not already in it spliced into `"Unlocks":[…]` (missing file → `{"Success":true,"Unlocks":[],"ServerNow":<now>}`);
+  - `startsession` (synthesized by rgarch offline, never sent by the sync tool) → built from `user/<g>.json` (`UserUnlocks`) with every `cs_local_unlocks` id not already in it spliced into `"Unlocks":[…]` (missing file → `{"Success":true,"Unlocks":[],"ServerNow":<now>}`);
   - `awardachievement` → `cs_queue_add(...)`, then `{"Success":true,"AchievementID":<a>}`;
   - everything else → `{"Success":true}`.
 - Memory: `rc_libretro_memory_init(&regions, core_memory_map(c), info_cb, console)`, where `info_cb` uses `core_memory(c, id, &size)`. `cs_system()` from Task 3 gives the console id: move it to `common/cheevos_store.c` in this task if Task 3 left it in `tools/`.

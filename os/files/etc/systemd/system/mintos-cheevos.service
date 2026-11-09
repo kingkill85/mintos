@@ -1,0 +1,8 @@
+[Unit]
+Description=RetroAchievements sync
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mintos-cheevos sync
+Nice=19
+IOSchedulingClass=idle

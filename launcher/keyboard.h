@@ -10,7 +10,7 @@
 enum { KB_UP, KB_DOWN, KB_LEFT, KB_RIGHT, KB_A, KB_B, KB_X, KB_Y, KB_START, KB_SELECT };
 enum { KB_NONE, KB_DONE, KB_CANCEL };
 
-typedef struct { char text[KB_MAX + 1]; int row, col, upper, sym; char lbl[8]; } Kb;
+typedef struct { char text[KB_MAX + 1]; int row, col, upper, sym, mask; char lbl[8]; } Kb;
 
 void kb_init(Kb *k);
 int kb_key(Kb *k, int key);

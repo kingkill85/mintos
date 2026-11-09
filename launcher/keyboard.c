@@ -67,7 +67,8 @@ void kb_draw(Ui *ui, Kb *k, const char *prompt, int y0) {
     ui_text(ui, ui->btn, prompt, PAD + 8, y0 + 14, UI_GRAY, ui->w - 2 * PAD);
     ui_pill(ui, PAD, y0 + 32, ui->w - 2 * PAD, 48, UI_DARK);
     char shown[KB_MAX + 2];
-    snprintf(shown, sizeof shown, "%s_", k->text);
+    if (k->mask) { size_t n = strlen(k->text); memset(shown, '*', n); strcpy(shown + n, "_"); }
+    else snprintf(shown, sizeof shown, "%s_", k->text);
     int tw = ui_text_w(ui->small, shown), maxw = ui->w - 2 * PAD - 40;
     /* keep the end (the cursor) visible */
     const char *s = shown;

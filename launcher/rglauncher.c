@@ -9,6 +9,7 @@
 #include "settings.h"
 #include "../common/settings.h"
 #include "../common/osd.h"
+#include "../common/cheevos_store.h"
 #include <dirent.h>
 #include <math.h>
 #include <stdio.h>
@@ -480,6 +481,11 @@ int main(void) {
     read_favs();
     build_root();
     load_state();
+    {   /* upload offline achievements in the background (a oneshot unit, Nice 19) once there is a login */
+        char tp[512];
+        if (!cs_path(tp, sizeof tp, "token") && !access(tp, F_OK))
+            if (system("systemctl start --no-block mintos-cheevos.service")) {}
+    }
     Uint32 held_since = 0, last_rep = 0, last_draw = 0, last_input = SDL_GetTicks();
     int held = 0, screen_off = 0, f_wakes = 0;
     const char *status = NULL;
