@@ -21,6 +21,12 @@ cp arch/arm64/boot/dts/rockchip/rk3566-anbernic-rg353v.dtb $OUT/dtb/
 # Wi-Fi SDIO (mmc@fe000000): SDR50 gives CRC errors (-84) with rtw88, run it at 25 MHz high-speed
 fdtput -d $OUT/dtb/rk3566-anbernic-rg353v.dtb /mmc@fe000000 sd-uhs-sdr50
 fdtput -t u $OUT/dtb/rk3566-anbernic-rg353v.dtb /mmc@fe000000 max-frequency 25000000
+# U-Boot turns the panel into anbernic,rg353v-panel-v2 (st7703), which asks for vcc/iovcc,
+# not the nv3051d vdd-supply: without them vcc3v3_lcd0_n counts as unused and is switched
+# off after 30 s, the panel goes black
+P=\$(fdtget -t u $OUT/dtb/rk3566-anbernic-rg353v.dtb /regulator-vcc3v3-lcd0 phandle)
+fdtput -t u $OUT/dtb/rk3566-anbernic-rg353v.dtb /dsi@fe060000/panel@0 vcc-supply \$P
+fdtput -t u $OUT/dtb/rk3566-anbernic-rg353v.dtb /dsi@fe060000/panel@0 iovcc-supply \$P
 make INSTALL_MOD_PATH=$OUT/modules INSTALL_MOD_STRIP=1 modules_install >/dev/null
 "
 echo "kernel built: $OUT"
