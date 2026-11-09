@@ -5,7 +5,7 @@
 # a power cycle boots the default kernel again.
 setenv tmp 0x00b00000
 # default: minimal kernel, no initramfs (Image/initrd.img = full Debian-config kernel, fallback)
-setenv kernel Image-min4
+setenv kernel Image-min5
 setenv initrd none
 setenv dtb rk3566-anbernic-rg353v.dtb
 setenv args "root=PARTUUID=0e11789e-45d0-4dd8-8a53-e9342b0f5faa rootwait rw console=ttyS2,1500000 console=tty3 quiet loglevel=3 vt.global_cursor_default=0"

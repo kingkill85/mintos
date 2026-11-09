@@ -16,7 +16,7 @@ compositor, no EmulationStation. It replaced ROCKNIX and the GammaOS Android.
   timer, info, reboot/power-off. Slow commands (`mintos-wifi`, `mintos-bt`) run as background jobs
   (`launcher/job.c`). Off switches stop the services and unload the drivers. State: `/storage/.config/mintos/settings.cfg`.
 - Kernels (Linux 6.12.116, cross-built with `os/build-kernel*.sh`):
-  - `Image-min4` (default, 20 MB): `MINVER=-rg353v-min4 os/build-kernel-min.sh` — localyesconfig
+  - `Image-min5` (default, 20 MB): `MINVER=-rg353v-min5 os/build-kernel-min.sh` — localyesconfig
     from the device's modules, only Rockchip, no initramfs, no tracing/BPF/IPv6/netfilter/video
     decoders, plus the CST340 touchscreen and the stick ADC multiplexer; 22 modules (Wi-Fi/Bluetooth, whose firmware is on
     the rootfs; plus BT_HIDP/UHID for Bluetooth controllers). System ready about 9 s after the kernel
@@ -108,5 +108,5 @@ boot partition). For a fresh card, also: copy `os/files/boot/boot.scr` to the bo
 partition, rename its `extlinux/extlinux.conf` away (it would win over `boot.scr`), put the
 fallback `extlinux.conf` into the rootfs's `/boot/extlinux/`, set the card's PARTUUID in
 `boot.cmd` (`mkimage -A arm64 -T script -C none -d boot.cmd boot.scr`), and install
-`Image-min4` with its modules (`MINVER=-rg353v-min4 os/build-kernel-min.sh`). `device/` holds
+`Image-min5` with its modules (`MINVER=-rg353v-min5 os/build-kernel-min.sh`). `device/` holds
 the earlier ROCKNIX launcher setup.

@@ -9,6 +9,9 @@ SRC=$W/linux-6.12.116
 VER=${MINVER:--rg353v-min}
 OUT=$W/out${VER#-rg353v}
 cp "$W/full.config" "$SRC/.config"
+# st7703 RG353V-V2 init: VCOM/POWER_EXT from the BSP (upstream patch by Ao Zhong, dri-devel 2024-02,
+# never merged); with the old values the panel sometimes stays black after power-on
+grep -q "SETVCOM, 0x7f, 0x7f" "$SRC/drivers/gpu/drm/panel/panel-sitronix-st7703.c" || patch -d "$SRC" -p1 < "$HERE/patches/st7703-rg353v2-init.patch"
 nix-shell -p pkgsCross.aarch64-multiplatform.stdenv.cc bc flex bison openssl elfutils perl python3 kmod dtc --run "
 set -e
 cd $SRC
